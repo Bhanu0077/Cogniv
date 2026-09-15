@@ -1,0 +1,232 @@
+# =========================================================
+# COGNIV - Git Ignore
+# =========================================================
+
+
+# =========================================================
+# OS / EDITOR FILES
+# =========================================================
+
+.DS_Store
+Thumbs.db
+
+.vscode/
+.idea/
+
+*.swp
+*.swo
+*~
+
+
+# =========================================================
+# ENVIRONMENT / SECRETS
+# =========================================================
+
+.env
+.env.*
+!.env.example
+
+*.key
+*.pem
+*.crt
+*.p12
+
+secrets/
+credentials/
+secrets.json
+credentials.json
+
+
+# =========================================================
+# PYTHON / FLASK BACKEND
+# =========================================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+
+*.so
+
+.Python
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+.coverage
+htmlcov/
+
+.tox/
+.nox/
+
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Flask
+instance/
+
+# Flask debug / local files
+*.log
+
+
+# =========================================================
+# SQLITE / LOCAL DATABASE
+# =========================================================
+
+*.db
+*.sqlite
+*.sqlite3
+
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Local database backups
+database/backups/
+*.sqlite.bak
+*.db.bak
+
+
+# =========================================================
+# NODE / REACT / VITE FRONTEND
+# =========================================================
+
+node_modules/
+
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+.npm/
+
+# Vite
+dist/
+.vite/
+
+# React build
+build/
+
+
+# =========================================================
+# FRONTEND LOCAL ENVIRONMENT
+# =========================================================
+
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+
+# =========================================================
+# EXTENSION LOCAL FILES
+# =========================================================
+
+extension/node_modules/
+
+extension/dist/
+extension/build/
+
+extension/.env
+extension/.env.*
+!extension/.env.example
+
+
+# =========================================================
+# GENERATED / TEMPORARY FILES
+# =========================================================
+
+tmp/
+temp/
+.cache/
+
+*.tmp
+*.temp
+
+*.bak
+*.backup
+
+*.log
+
+
+# =========================================================
+# TEST / COVERAGE OUTPUT
+# =========================================================
+
+coverage/
+.nyc_output/
+
+.pytest_cache/
+
+
+# =========================================================
+# AI / LOCAL TOOL FILES
+# =========================================================
+
+.cursor/
+.claude/
+.codex/
+
+# Local AI agent state
+.ai/
+.agent/
+
+
+# =========================================================
+# UPLOADS / USER DATA
+# =========================================================
+
+uploads/
+backend/uploads/
+
+user_data/
+local_data/
+
+# Don't accidentally commit exported user data
+*.csv
+*.jsonl
+
+
+# =========================================================
+# LARGE / GENERATED MEDIA
+# =========================================================
+
+*.mp4
+*.webm
+*.mov
+*.avi
+*.mkv
+
+*.mp3
+*.wav
+*.flac
+
+*.zip
+*.tar
+*.tar.gz
+
+
+# =========================================================
+# LOCAL DEVELOPMENT
+# =========================================================
+
+*.pid
+*.pid.lock
+
+.Docker/
+
+docker-data/
+
+
+# =========================================================
+# SYSTEM FILES
+# =========================================================
+
+.Trash-*
+.nfs*

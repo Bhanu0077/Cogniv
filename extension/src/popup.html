@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <title>Cogniv</title>
+
+  <link
+    rel="stylesheet"
+    href="popup.css"
+  >
+
+</head>
+
+
+<body>
+
+  <div class="app">
+
+    <header>
+
+      <div class="logo">
+        Cogniv
+      </div>
+
+      <div class="subtitle">
+        YouTube Learning Tracker
+      </div>
+
+    </header>
+
+
+    <div
+      id="status"
+      class="status"
+    >
+      Ready to scan
+    </div>
+
+
+    <div
+      id="playlistCard"
+      class="playlist-card hidden"
+    >
+
+      <div class="detected">
+        ✓ PLAYLIST DETECTED
+      </div>
+
+
+      <div
+        id="playlistTitle"
+        class="title"
+      >
+        —
+      </div>
+
+
+      <div
+        id="playlistUrl"
+        class="url"
+      >
+        —
+      </div>
+
+
+      <div class="videos">
+
+        <span id="videoCount">
+          0
+        </span>
+
+        videos detected
+
+      </div>
+
+    </div>
+
+
+    <button
+      id="scanButton"
+    >
+      Scan Playlist
+    </button>
+
+
+    <button
+      id="importButton"
+      class="hidden import"
+    >
+      Import to Cogniv
+    </button>
+
+
+    <div
+      id="result"
+      class="result"
+    ></div>
+
+  </div>
+
+
+  <script src="popup.js"></script>
+
+</body>
+
+</html>
