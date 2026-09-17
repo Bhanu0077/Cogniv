@@ -305,9 +305,10 @@ function CourseDetails() {
 
             {lessons.map((lesson) => (
 
-              <div
+              <Link
                 className="course-item"
                 key={lesson.id}
+                to={`/courses/${courseId}/lessons/${lesson.id}`}
               >
 
                 <div>
@@ -335,7 +336,7 @@ function CourseDetails() {
 
                 </span>
 
-              </div>
+              </Link>
 
             ))}
 

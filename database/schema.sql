@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS courses (
     title TEXT NOT NULL,
     description TEXT,
     source TEXT,
+    youtube_playlist_id TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (user_id)
@@ -94,3 +95,8 @@ CREATE TABLE IF NOT EXISTS study_sessions (
         REFERENCES users(id)
         ON DELETE CASCADE
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS
+idx_courses_user_youtube_playlist
+ON courses(user_id, youtube_playlist_id)
+WHERE youtube_playlist_id IS NOT NULL;

@@ -146,9 +146,9 @@ def get_courses():
                 title,
                 description,
                 source,
+                youtube_playlist_id,
                 created_at
             FROM courses
-            ORDER BY id DESC
             """
         ).fetchall()
 
@@ -839,14 +839,26 @@ def import_youtube_playlist():
             }), 400
 
         user_id = data.get("user_id")
-        playlist_title = data.get(
-            "playlist_title",
-            ""
+
+        playlist_id = str(
+            data.get(
+                "playlist_id",
+                ""
+            )
         ).strip()
 
-        playlist_url = data.get(
-            "playlist_url",
-            ""
+        playlist_title = str(
+            data.get(
+                "playlist_title",
+                ""
+            )
+        ).strip()
+
+        playlist_url = str(
+            data.get(
+                "playlist_url",
+                ""
+            )
         ).strip()
 
         videos = data.get("videos", [])
@@ -855,6 +867,12 @@ def import_youtube_playlist():
             return jsonify({
                 "status": "error",
                 "message": "user_id is required"
+            }), 400
+
+        if not playlist_id:
+            return jsonify({
+                "status": "error",
+                "message": "playlist_id is required"
             }), 400
 
         if not playlist_title:
@@ -871,8 +889,16 @@ def import_youtube_playlist():
 
         db = get_db()
 
+        # ------------------------------------
+        # Verify user
+        # ------------------------------------
+
         user = db.execute(
-            "SELECT id FROM users WHERE id = ?",
+            """
+            SELECT id
+            FROM users
+            WHERE id = ?
+            """,
             (user_id,)
         ).fetchone()
 
@@ -885,6 +911,227 @@ def import_youtube_playlist():
             }), 404
 
         # ------------------------------------
+        # Check for existing playlist
+        # ------------------------------------
+
+        existing_course = db.execute(
+            """
+            SELECT
+                id,
+                title,
+                source
+            FROM courses
+            WHERE user_id = ?
+              AND youtube_playlist_id = ?
+            ORDER BY id ASC
+            LIMIT 1
+            """,
+            (
+                user_id,
+                playlist_id
+            )
+        ).fetchone()
+
+        if existing_course:
+
+                course_id = existing_course["id"]
+
+                updated_lessons = []
+                added_lessons = []
+
+                for index, video in enumerate(videos, start=1):
+
+                    title = str(
+                        video.get("title", "")
+                    ).strip()
+
+                    video_url = str(
+                        video.get("video_url", "")
+                    ).strip()
+
+                    try:
+                        duration_seconds = int(
+                            video.get(
+                                "duration_seconds",
+                                0
+                            ) or 0
+                        )
+                    except (TypeError, ValueError):
+                        duration_seconds = 0
+
+                    try:
+                        position = int(
+                            video.get(
+                                "position",
+                                index
+                            ) or index
+                        )
+                    except (TypeError, ValueError):
+                        position = index
+
+                    if not title:
+                        continue
+
+                    # Try to identify the existing lesson
+                    existing_lesson = None
+
+                    if video_url:
+                        existing_lesson = db.execute(
+                            """
+                            SELECT
+                                id,
+                                title,
+                                video_url,
+                                duration_seconds,
+                                position
+                            FROM lessons
+                            WHERE course_id = ?
+                            AND video_url = ?
+                            LIMIT 1
+                            """,
+                            (
+                                course_id,
+                                video_url
+                            )
+                        ).fetchone()
+
+                    # Fallback to position when the old
+                    # lesson has an empty video URL.
+                    if not existing_lesson:
+                        existing_lesson = db.execute(
+                            """
+                            SELECT
+                                id,
+                                title,
+                                video_url,
+                                duration_seconds,
+                                position
+                            FROM lessons
+                            WHERE course_id = ?
+                            AND position = ?
+                            LIMIT 1
+                            """,
+                            (
+                                course_id,
+                                position
+                            )
+                        ).fetchone()
+
+                    if existing_lesson:
+
+                        # Only replace the URL when the
+                        # newly scanned URL is valid.
+                        new_video_url = (
+                            video_url
+                            if video_url
+                            else existing_lesson["video_url"]
+                        )
+
+                        new_duration = (
+                            duration_seconds
+                            if duration_seconds > 0
+                            else existing_lesson["duration_seconds"]
+                        )
+
+                        db.execute(
+                            """
+                            UPDATE lessons
+                            SET
+                                title = ?,
+                                video_url = ?,
+                                duration_seconds = ?,
+                                position = ?
+                            WHERE id = ?
+                            """,
+                            (
+                                title,
+                                new_video_url,
+                                new_duration,
+                                position,
+                                existing_lesson["id"]
+                            )
+                        )
+
+                        updated_lessons.append({
+                            "id": existing_lesson["id"],
+                            "title": title,
+                            "video_url": new_video_url,
+                            "duration_seconds": new_duration,
+                            "position": position
+                        })
+
+                    else:
+
+                        cursor = db.execute(
+                            """
+                            INSERT INTO lessons
+                            (
+                                course_id,
+                                title,
+                                video_url,
+                                duration_seconds,
+                                position
+                            )
+                            VALUES (?, ?, ?, ?, ?)
+                            """,
+                            (
+                                course_id,
+                                title,
+                                video_url,
+                                duration_seconds,
+                                position
+                            )
+                        )
+
+                        added_lessons.append({
+                            "id": cursor.lastrowid,
+                            "title": title,
+                            "video_url": video_url,
+                            "duration_seconds":
+                                duration_seconds,
+                            "position": position
+                        })
+
+                db.commit()
+
+                all_lessons = db.execute(
+                    """
+                    SELECT
+                        id,
+                        title,
+                        video_url,
+                        duration_seconds,
+                        position
+                    FROM lessons
+                    WHERE course_id = ?
+                    ORDER BY position ASC, id ASC
+                    """,
+                    (course_id,)
+                ).fetchall()
+
+                db.close()
+
+                return jsonify({
+                    "status": "ok",
+                    "already_imported": True,
+                    "message":
+                        "YouTube playlist synchronized successfully",
+                    "course": {
+                        "id": course_id,
+                        "title": existing_course["title"],
+                        "source": existing_course["source"]
+                    },
+                    "updated_count":
+                        len(updated_lessons),
+                    "added_count":
+                        len(added_lessons),
+                    "lessons": [
+                        dict(lesson)
+                        for lesson in all_lessons
+                    ]
+                }), 200
+
+        # ------------------------------------
         # Create course
         # ------------------------------------
 
@@ -895,15 +1142,17 @@ def import_youtube_playlist():
                 user_id,
                 title,
                 description,
-                source
+                source,
+                youtube_playlist_id
             )
-            VALUES (?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?)
             """,
             (
                 user_id,
                 playlist_title,
                 "Imported from YouTube",
-                playlist_url
+                playlist_url,
+                playlist_id
             )
         )
 
@@ -934,19 +1183,25 @@ def import_youtube_playlist():
                 )
             ).strip()
 
-            duration_seconds = int(
-                video.get(
-                    "duration_seconds",
-                    0
-                ) or 0
-            )
+            try:
+                duration_seconds = int(
+                    video.get(
+                        "duration_seconds",
+                        0
+                    ) or 0
+                )
+            except (TypeError, ValueError):
+                duration_seconds = 0
 
-            position = int(
-                video.get(
-                    "position",
-                    index
-                ) or index
-            )
+            try:
+                position = int(
+                    video.get(
+                        "position",
+                        index
+                    ) or index
+                )
+            except (TypeError, ValueError):
+                position = index
 
             if not title:
                 continue
@@ -987,6 +1242,7 @@ def import_youtube_playlist():
 
         return jsonify({
             "status": "ok",
+            "already_imported": False,
             "message":
                 "YouTube playlist imported successfully",
             "course": {
@@ -1007,6 +1263,194 @@ def import_youtube_playlist():
             "error": str(error)
         }), 500
 
+# ============================================
+# EXTENSION YOUTUBE PROGRESS
+# ============================================
+
+@app.route(
+    "/api/extension/progress",
+    methods=["POST"]
+)
+def extension_progress():
+
+    try:
+
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                "status": "error",
+                "message": "Request body is required"
+            }), 400
+
+        user_id = data.get("user_id")
+
+        video_url = str(
+            data.get("video_url", "")
+        ).strip()
+
+        watched_seconds = int(
+            data.get("watched_seconds", 0) or 0
+        )
+
+        duration_seconds = int(
+            data.get("duration_seconds", 0) or 0
+        )
+
+        completed = bool(
+            data.get("completed", False)
+        )
+
+        if not user_id:
+            return jsonify({
+                "status": "error",
+                "message": "user_id is required"
+            }), 400
+
+        if not video_url:
+            return jsonify({
+                "status": "error",
+                "message": "video_url is required"
+            }), 400
+
+        db = get_db()
+
+        user = db.execute(
+            """
+            SELECT id
+            FROM users
+            WHERE id = ?
+            """,
+            (user_id,)
+        ).fetchone()
+
+        if not user:
+            db.close()
+
+            return jsonify({
+                "status": "error",
+                "message": "User not found"
+            }), 404
+
+        # Find the Cogniv lesson using the YouTube URL.
+        lesson = db.execute(
+            """
+            SELECT
+                id,
+                course_id,
+                duration_seconds
+            FROM lessons
+            WHERE video_url = ?
+            LIMIT 1
+            """,
+            (video_url,)
+        ).fetchone()
+
+        if not lesson:
+
+            db.close()
+
+            return jsonify({
+                "status": "ok",
+                "tracked": False,
+                "message":
+                    "Video is not linked to a Cogniv lesson"
+            }), 200
+
+        lesson_id = lesson["id"]
+
+        if duration_seconds <= 0:
+            duration_seconds = (
+                lesson["duration_seconds"] or 0
+            )
+
+        # Automatically consider a video complete
+        # when the user reaches 90% of it.
+        if (
+            duration_seconds > 0
+            and watched_seconds >=
+                int(duration_seconds * 0.90)
+        ):
+            completed = True
+
+        existing = db.execute(
+            """
+            SELECT id
+            FROM progress
+            WHERE user_id = ?
+              AND lesson_id = ?
+            LIMIT 1
+            """,
+            (
+                user_id,
+                lesson_id
+            )
+        ).fetchone()
+
+        if existing:
+
+            db.execute(
+                """
+                UPDATE progress
+                SET
+                    watched_seconds = ?,
+                    completed = ?,
+                    updated_at =
+                        CURRENT_TIMESTAMP
+                WHERE user_id = ?
+                  AND lesson_id = ?
+                """,
+                (
+                    watched_seconds,
+                    int(completed),
+                    user_id,
+                    lesson_id
+                )
+            )
+
+        else:
+
+            db.execute(
+                """
+                INSERT INTO progress
+                (
+                    user_id,
+                    lesson_id,
+                    watched_seconds,
+                    completed
+                )
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    user_id,
+                    lesson_id,
+                    watched_seconds,
+                    int(completed)
+                )
+            )
+
+        db.commit()
+        db.close()
+
+        return jsonify({
+            "status": "ok",
+            "tracked": True,
+            "lesson_id": lesson_id,
+            "watched_seconds":
+                watched_seconds,
+            "completed": completed
+        }), 200
+
+    except Exception as error:
+
+        return jsonify({
+            "status": "error",
+            "error": str(error)
+        }), 500
+
+# ============================================
+# APPLICATION START
+# ============================================
 
 if __name__ == "__main__":
     app.run(

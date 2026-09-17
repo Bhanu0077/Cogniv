@@ -12,6 +12,7 @@ import CourseDetails from "./pages/CourseDetails";
 import StudyTimer from "./pages/StudyTimer";
 import Progress from "./pages/Progress";
 import Settings from "./pages/Settings";
+import LessonPlayer from "./pages/LessonPlayer";
 
 
 function App() {
@@ -39,6 +40,11 @@ function App() {
           <Route
             path="/courses/:courseId"
             element={<CourseDetails />}
+          />
+
+          <Route
+            path="/courses/:courseId/lessons/:lessonId"
+            element={<LessonPlayer />}
           />
 
           <Route

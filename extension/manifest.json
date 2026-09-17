@@ -1,47 +1,36 @@
 {
   "manifest_version": 3,
-
   "name": "Cogniv YouTube Tracker",
-
   "version": "0.1.0",
-
-  "description": "Connect YouTube learning activity with Cogniv.",
-
+  "description": "Connect YouTube learning activity and Cogniv.",
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "scripting"
   ],
-
   "host_permissions": [
     "https://www.youtube.com/*",
     "https://*.youtube.com/*",
     "https://*.youtube-nocookie.com/*",
     "http://localhost:5000/*"
   ],
-
   "background": {
     "service_worker": "src/background.js"
   },
-
   "action": {
     "default_popup": "src/popup.html",
     "default_title": "Cogniv"
   },
-
   "content_scripts": [
-
     {
       "matches": [
         "https://www.youtube.com/*",
         "https://*.youtube.com/*"
       ],
-
       "js": [
         "src/content.js"
       ],
-
       "run_at": "document_idle"
     }
-
   ]
 }
