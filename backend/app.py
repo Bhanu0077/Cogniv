@@ -1448,6 +1448,284 @@ def extension_progress():
             "error": str(error)
         }), 500
 
+
+# ============================================
+# YOUTUBE PLAYLIST PROGRESS
+# ============================================
+
+@app.route(
+    "/api/youtube/playlist/<string:playlist_id>/progress",
+    methods=["GET"]
+)
+def get_youtube_playlist_progress(playlist_id):
+
+    user_id = request.args.get(
+        "user_id",
+        type=int
+    )
+
+    if not user_id:
+        return jsonify({
+            "status": "error",
+            "message": "user_id is required"
+        }), 400
+
+    try:
+
+        db = get_db()
+
+        # Find the Cogniv course linked to this YouTube playlist.
+        course = db.execute(
+            """
+            SELECT
+                id,
+                user_id,
+                title,
+                description,
+                source,
+                youtube_playlist_id,
+                created_at
+            FROM courses
+            WHERE youtube_playlist_id = ?
+              AND user_id = ?
+            LIMIT 1
+            """,
+            (
+                playlist_id,
+                user_id
+            )
+        ).fetchone()
+
+        if not course:
+
+            db.close()
+
+            return jsonify({
+                "status": "error",
+                "message": "YouTube playlist is not linked to this Cogniv course",
+                "playlist_id": playlist_id
+            }), 404
+
+        # Get every lesson and its progress.
+        lessons = db.execute(
+            """
+            SELECT
+                lessons.id,
+                lessons.course_id,
+                lessons.title,
+                lessons.video_url,
+                lessons.duration_seconds,
+                lessons.position,
+
+                COALESCE(
+                    progress.watched_seconds,
+                    0
+                ) AS watched_seconds,
+
+                COALESCE(
+                    progress.completed,
+                    0
+                ) AS completed,
+
+                progress.updated_at
+
+            FROM lessons
+
+            LEFT JOIN progress
+                ON progress.lesson_id = lessons.id
+                AND progress.user_id = ?
+
+            WHERE lessons.course_id = ?
+
+            ORDER BY
+                lessons.position ASC,
+                lessons.id ASC
+            """,
+            (
+                user_id,
+                course["id"]
+            )
+        ).fetchall()
+
+        db.close()
+
+        lesson_results = []
+
+        total_duration_seconds = 0
+        watched_seconds_total = 0
+        completed_lessons = 0
+        in_progress_lessons = 0
+        not_started_lessons = 0
+
+        for row in lessons:
+
+            lesson = dict(row)
+
+            duration = max(
+                0,
+                int(lesson["duration_seconds"] or 0)
+            )
+
+            watched = max(
+                0,
+                int(lesson["watched_seconds"] or 0)
+            )
+
+            # Never allow displayed watched time
+            # to exceed the lesson duration.
+            if duration > 0:
+                watched = min(
+                    watched,
+                    duration
+                )
+
+            completed = bool(
+                lesson["completed"]
+            )
+
+            # A 90% watch threshold is also treated
+            # as completed for analytics.
+            if (
+                not completed
+                and duration > 0
+                and watched >= int(duration * 0.90)
+            ):
+                completed = True
+
+            if completed:
+                completed_lessons += 1
+
+            elif watched > 0:
+                in_progress_lessons += 1
+
+            else:
+                not_started_lessons += 1
+
+            total_duration_seconds += duration
+            watched_seconds_total += watched
+
+            percentage = 0
+
+            if duration > 0:
+                percentage = min(
+                    100,
+                    round(
+                        watched / duration * 100,
+                        1
+                    )
+                )
+
+            lesson["watched_seconds"] = watched
+            lesson["completed"] = int(completed)
+            lesson["percentage"] = percentage
+
+            lesson_results.append(lesson)
+
+        total_lessons = len(
+            lesson_results
+        )
+
+        remaining_seconds = max(
+            0,
+            total_duration_seconds
+            - watched_seconds_total
+        )
+
+        completion_percentage = 0
+
+        if total_duration_seconds > 0:
+            completion_percentage = round(
+                watched_seconds_total
+                / total_duration_seconds
+                * 100,
+                1
+            )
+
+        # Current lesson:
+        # The most recently watched lesson is considered
+        # the current lesson.
+        current_lesson = None
+
+        for lesson in lesson_results:
+
+            if (
+                lesson["updated_at"]
+                and lesson["watched_seconds"] > 0
+            ):
+
+                if (
+                    current_lesson is None
+                    or lesson["updated_at"]
+                    > current_lesson["updated_at"]
+                ):
+                    current_lesson = lesson
+
+        # Continue lesson:
+        # 1. First in-progress lesson
+        # 2. Otherwise first not-started lesson
+        # 3. Otherwise none
+        continue_lesson = None
+
+        for lesson in lesson_results:
+
+            if (
+                not lesson["completed"]
+                and lesson["watched_seconds"] > 0
+            ):
+                continue_lesson = lesson
+                break
+
+        if continue_lesson is None:
+
+            for lesson in lesson_results:
+
+                if not lesson["completed"]:
+                    continue_lesson = lesson
+                    break
+
+        return jsonify({
+            "status": "ok",
+
+            "course": {
+                "id": course["id"],
+                "title": course["title"],
+                "description": course["description"],
+                "source": course["source"],
+                "youtube_playlist_id":
+                    course["youtube_playlist_id"]
+            },
+
+            "summary": {
+                "total_lessons": total_lessons,
+                "completed_lessons": completed_lessons,
+                "in_progress_lessons": in_progress_lessons,
+                "not_started_lessons": not_started_lessons,
+
+                "completion_percentage":
+                    completion_percentage,
+
+                "watched_seconds":
+                    watched_seconds_total,
+
+                "total_duration_seconds":
+                    total_duration_seconds,
+
+                "remaining_seconds":
+                    remaining_seconds
+            },
+
+            "current_lesson": current_lesson,
+            "continue_lesson": continue_lesson,
+            "lessons": lesson_results
+        }), 200
+
+    except Exception as error:
+
+        return jsonify({
+            "status": "error",
+            "error": str(error)
+        }), 500
+
 # ============================================
 # APPLICATION START
 # ============================================
