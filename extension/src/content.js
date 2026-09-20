@@ -273,118 +273,318 @@ function getCurrentVideoId() {
 }
 
 
-function sendProgress(completed = false) {
-    const video = getCurrentVideoElement();
+/*
+   =========================================================
+   COGNIV VIDEO PROGRESS TRACKER
+   =========================================================
 
-    if (!video) {
-        return;
-    }
+   Important rule:
 
-    const currentTime = Number(video.currentTime);
-    const duration = Number(video.duration);
+   The video element and the YouTube URL must represent the
+   SAME video before progress is sent.
 
-    // Ignore invalid YouTube playback states
-    if (!Number.isFinite(currentTime) || currentTime < 0) {
-        return;
-    }
+   YouTube uses SPA navigation, so during navigation the URL
+   can change before the old <video> element is replaced.
+   Never mix those two states.
+*/
 
-    // Live streams / videos without a usable duration
-    if (!Number.isFinite(duration) || duration <= 0) {
-        console.log("[Cogniv] Skipping progress: invalid duration");
-        return;
-    }
+let cognivTrackedVideoId = "";
+let cognivTrackerGeneration = 0;
+let cognivInitTimer = null;
 
-    // Never allow progress to exceed the actual video duration
-    const watchedSeconds = Math.min(
-        Math.floor(currentTime),
-        Math.floor(duration)
+
+function getTrackerVideoId() {
+  try {
+    const params = new URLSearchParams(
+      window.location.search
     );
 
-    const videoUrl = getCurrentVideoUrl();
-
-    if (!videoUrl) {
-        return;
-    }
-
-    const finalCompleted =
-        completed || watchedSeconds >= Math.floor(duration * 0.9);
-
-    const progressData = {
-        user_id: 1,
-        video_url: videoUrl,
-        watched_seconds: watchedSeconds,
-        duration_seconds: Math.floor(duration),
-        completed: finalCompleted
-    };
-
-    console.log("[Cogniv] Sending progress:", progressData);
-
-    chrome.runtime.sendMessage(
-        {
-            type: "VIDEO_PROGRESS",
-            data: progressData
-        },
-        (response) => {
-            if (chrome.runtime.lastError) {
-                console.error(
-                    "[Cogniv] Progress message error:",
-                    chrome.runtime.lastError.message
-                );
-                return;
-            }
-
-            console.log("[Cogniv] Progress response:", response);
-        }
-    );
+    return params.get("v") || "";
+  } catch (error) {
+    return "";
+  }
 }
 
 
-function handlePlay() {
+function isTrackerVideoValid(video) {
+  if (!video) {
+    return false;
+  }
+
+  if (video !== currentVideo) {
+    return false;
+  }
+
+  const urlVideoId = getTrackerVideoId();
+
+  if (!urlVideoId) {
+    return false;
+  }
+
+  const elementVideoId =
+    video.dataset.cognivVideoId || "";
+
+  if (!elementVideoId) {
+    return false;
+  }
+
+  if (urlVideoId !== elementVideoId) {
+    console.log(
+      "[Cogniv Tracker] Ignoring mismatched video:",
+      {
+        urlVideoId,
+        elementVideoId
+      }
+    );
+
+    return false;
+  }
+
+  return true;
+}
+
+
+function sendProgress(
+  completed = false,
+  eventVideo = null,
+  eventVideoId = ""
+) {
+  const video =
+    eventVideo || currentVideo;
+
+  if (!isTrackerVideoValid(video)) {
+    console.log(
+      "[Cogniv Tracker] Ignoring stale progress event."
+    );
+
+    return;
+  }
+
+  const currentVideoId =
+    getTrackerVideoId();
+
+  if (
+    eventVideoId &&
+    eventVideoId !== currentVideoId
+  ) {
+    console.log(
+      "[Cogniv Tracker] Ignoring old video event:",
+      {
+        eventVideoId,
+        currentVideoId
+      }
+    );
+
+    return;
+  }
+
+  const trackedVideoId =
+    video.dataset.cognivVideoId || "";
+
+  if (
+    !trackedVideoId ||
+    trackedVideoId !== currentVideoId
+  ) {
+    console.log(
+      "[Cogniv Tracker] Video identity mismatch."
+    );
+
+    return;
+  }
+
+  const currentTime =
+    Number(video.currentTime);
+
+  const duration =
+    Number(video.duration);
+
+  if (
+    !Number.isFinite(currentTime) ||
+    currentTime < 0
+  ) {
+    return;
+  }
+
+  if (
+    !Number.isFinite(duration) ||
+    duration <= 0
+  ) {
+    return;
+  }
+
+  const watchedSeconds =
+    Math.min(
+      Math.floor(currentTime),
+      Math.floor(duration)
+    );
+
+  const videoUrl =
+    getCurrentVideoUrl();
+
+  if (!videoUrl) {
+    return;
+  }
+
+  const finalCompleted =
+    completed ||
+    watchedSeconds >=
+      Math.floor(duration * 0.9);
+
+  const progressData = {
+    user_id: 1,
+    video_url: videoUrl,
+    watched_seconds: watchedSeconds,
+    duration_seconds: Math.floor(duration),
+    completed: finalCompleted
+  };
+
   console.log(
-    "[Cogniv Tracker] Video playing."
+    "[Cogniv] Sending VERIFIED progress:",
+    progressData
+  );
+
+  chrome.runtime.sendMessage(
+    {
+      type: "VIDEO_PROGRESS",
+      data: progressData
+    },
+    (response) => {
+      if (chrome.runtime.lastError) {
+        console.error(
+          "[Cogniv] Progress message error:",
+          chrome.runtime.lastError.message
+        );
+
+        return;
+      }
+
+      console.log(
+        "[Cogniv] Progress response:",
+        response
+      );
+    }
+  );
+}
+
+
+function handlePlay(event) {
+  const video =
+    event.currentTarget;
+
+  if (
+    video !== currentVideo ||
+    !isTrackerVideoValid(video)
+  ) {
+    return;
+  }
+
+  console.log(
+    "[Cogniv Tracker] Video playing:",
+    cognivTrackedVideoId
   );
 
   startTracking();
 }
 
 
-function handlePause() {
-  console.log(
-    "[Cogniv Tracker] Video paused."
-  );
+function handlePause(event) {
+  const video =
+    event.currentTarget;
 
-  sendProgress(false);
-  stopTracking();
-}
-
-
-function handleEnded() {
-  console.log(
-    "[Cogniv Tracker] Video ended."
-  );
-
-  sendProgress(true);
-  stopTracking();
-}
-
-
-function attachVideoListeners(video) {
-  if (!video) {
+  if (
+    video !== currentVideo ||
+    !isTrackerVideoValid(video)
+  ) {
     return;
   }
 
+  console.log(
+    "[Cogniv Tracker] Video paused:",
+    cognivTrackedVideoId
+  );
+
+  sendProgress(
+    false,
+    video,
+    cognivTrackedVideoId
+  );
+
+  stopTracking();
+}
+
+
+function handleEnded(event) {
+  const video =
+    event.currentTarget;
+
   if (
-    video.dataset.cognivTracking ===
-    "true"
+    video !== currentVideo ||
+    !isTrackerVideoValid(video)
   ) {
     return;
+  }
+
+  console.log(
+    "[Cogniv Tracker] Video ended:",
+    cognivTrackedVideoId
+  );
+
+  sendProgress(
+    true,
+    video,
+    cognivTrackedVideoId
+  );
+
+  stopTracking();
+}
+
+
+function attachVideoListeners(video, videoId) {
+  if (!video || !videoId) {
+    return;
+  }
+
+  /*
+     If this DOM element was previously used for another
+     YouTube video, remove the old Cogniv listeners first.
+  */
+
+  if (
+    video.dataset.cognivTracking === "true"
+  ) {
+    if (
+      video.dataset.cognivVideoId === videoId
+    ) {
+      return;
+    }
+
+    video.removeEventListener(
+      "play",
+      handlePlay
+    );
+
+    video.removeEventListener(
+      "pause",
+      handlePause
+    );
+
+    video.removeEventListener(
+      "ended",
+      handleEnded
+    );
+
+    delete video.dataset.cognivTracking;
   }
 
   video.dataset.cognivTracking =
     "true";
 
+  video.dataset.cognivVideoId =
+    videoId;
+
   console.log(
-    "[Cogniv Tracker] Attaching video listeners."
+    "[Cogniv Tracker] Attaching listeners:",
+    videoId
   );
 
   video.addEventListener(
@@ -409,23 +609,40 @@ function startTracking() {
     return;
   }
 
+  const generation =
+    cognivTrackerGeneration;
+
   trackingInterval =
     setInterval(() => {
 
-      const video =
-        getCurrentVideoElement();
+      /*
+         Stop immediately if YouTube navigated to another
+         video while this interval was still alive.
+      */
 
-      if (!video) {
+      if (
+        generation !==
+        cognivTrackerGeneration
+      ) {
+        stopTracking();
         return;
       }
 
-      currentVideo =
-        video;
+      const video =
+        currentVideo;
 
-      currentVideoUrl =
-        getCurrentVideoUrl();
+      if (
+        !video ||
+        !isTrackerVideoValid(video)
+      ) {
+        return;
+      }
 
-      sendProgress(false);
+      sendProgress(
+        false,
+        video,
+        cognivTrackedVideoId
+      );
 
     }, 10000);
 }
@@ -444,40 +661,139 @@ function stopTracking() {
 }
 
 
+function invalidateCurrentTracker() {
+  cognivTrackerGeneration++;
+
+  stopTracking();
+
+  currentVideo = null;
+  currentVideoUrl = "";
+  cognivTrackedVideoId = "";
+
+  lastSentSeconds = -1;
+}
+
+
+function scheduleTrackerInitialization(delay = 500) {
+  if (cognivInitTimer) {
+    clearTimeout(cognivInitTimer);
+  }
+
+  cognivInitTimer =
+    setTimeout(() => {
+      cognivInitTimer = null;
+
+      initializeVideoTracker();
+
+    }, delay);
+}
+
+
 function initializeVideoTracker() {
   const video =
     getCurrentVideoElement();
 
-  if (!video) {
+  const videoId =
+    getTrackerVideoId();
+
+  const videoUrl =
+    getCurrentVideoUrl();
+
+  if (
+    !video ||
+    !videoId ||
+    !videoUrl
+  ) {
     return;
   }
 
+  /*
+     YouTube may have changed the URL while the old video
+     element is still in the DOM.
+
+     Never attach the old element to the new URL.
+  */
+
+  const existingElementId =
+    video.dataset.cognivVideoId || "";
+
   if (
-    currentVideo !== video
+    existingElementId &&
+    existingElementId !== videoId
   ) {
+    console.log(
+      "[Cogniv Tracker] Waiting for new video element:",
+      {
+        urlVideoId: videoId,
+        elementVideoId: existingElementId
+      }
+    );
+
+    scheduleTrackerInitialization(300);
+
+    return;
+  }
+
+  /*
+     Wait until YouTube has loaded metadata for the new
+     video. This prevents reading stale duration/currentTime.
+  */
+
+  if (
+    !Number.isFinite(
+      Number(video.duration)
+    ) ||
+    Number(video.duration) <= 0
+  ) {
+    scheduleTrackerInitialization(300);
+    return;
+  }
+
+  const changed =
+    currentVideo !== video ||
+    currentVideoUrl !== videoUrl ||
+    cognivTrackedVideoId !== videoId;
+
+  if (changed) {
     /*
-     * Save the previous video's
-     * latest position before switching.
-     */
-    if (currentVideo) {
-      sendProgress(false);
-      stopTracking();
-    }
+       IMPORTANT:
+       Do NOT call sendProgress() for the old video here.
+
+       At this point window.location may already point to
+       the NEW video. Sending the old element's currentTime
+       would corrupt the new video's progress.
+    */
+
+    stopTracking();
+
+    cognivTrackerGeneration++;
 
     currentVideo = video;
 
     currentVideoUrl =
-      getCurrentVideoUrl();
+      videoUrl;
+
+    cognivTrackedVideoId =
+      videoId;
 
     lastSentSeconds = -1;
 
+    video.dataset.cognivVideoId =
+      videoId;
+
     console.log(
-      "[Cogniv Tracker] Current video:",
-      currentVideoUrl
+      "[Cogniv Tracker] Current video VERIFIED:",
+      {
+        videoId,
+        videoUrl
+      }
     );
   }
 
-  attachVideoListeners(video);
+  attachVideoListeners(
+    video,
+    videoId
+  );
 
   trackerInitialized = true;
 }
@@ -493,30 +809,46 @@ let lastUrl =
 
 setInterval(() => {
 
+  const currentUrl =
+    window.location.href;
+
   if (
-    window.location.href !== lastUrl
+    currentUrl === lastUrl
   ) {
-
-    lastUrl =
-      window.location.href;
-
-    console.log(
-      "[Cogniv Tracker] YouTube navigation detected."
-    );
-
-    stopTracking();
-
-    currentVideo = null;
-    currentVideoUrl = "";
-    lastSentSeconds = -1;
-
-    setTimeout(
-      initializeVideoTracker,
-      1000
-    );
+    return;
   }
 
-}, 1000);
+  console.log(
+    "[Cogniv Tracker] YouTube navigation detected:",
+    {
+      from: lastUrl,
+      to: currentUrl
+    }
+  );
+
+  lastUrl =
+    currentUrl;
+
+  /*
+     Immediately invalidate the old video.
+
+     This is the critical protection against:
+
+       OLD currentTime + NEW URL
+  */
+
+  invalidateCurrentTracker();
+
+  /*
+     YouTube needs time to replace/load the new video
+     element. Initialization will retry until the video
+     is actually ready.
+  */
+
+  scheduleTrackerInitialization(500);
+
+}, 250);
+
 
 
 /* =========================================================
@@ -962,6 +1294,84 @@ function renderCognivProgress(body, data) {
   const summary = data.summary;
 
   // ----------------------------------------------------------
+  // Playlist filters
+  // ----------------------------------------------------------
+
+  const filterBar =
+    document.createElement("div");
+
+  filterBar.id =
+    "cogniv-playlist-filters";
+
+  filterBar.style.cssText = `
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    margin-bottom: 10px;
+  `;
+
+  const filters = [
+    ["all", "All"],
+    ["in-progress", "Active"],
+    ["completed", "Done"],
+    ["not-started", "New"],
+  ];
+
+  filters.forEach(([value, label], index) => {
+    const button =
+      document.createElement("button");
+
+    button.type = "button";
+    button.dataset.filter = value;
+    button.textContent = label;
+
+    button.style.cssText = `
+      border: 1px solid #374151;
+      border-radius: 6px;
+      padding: 6px 3px;
+
+      background: ${index === 0
+        ? "#2563eb"
+        : "#1f2937"};
+
+      color: #e5e7eb;
+
+      font-family: Arial, sans-serif;
+      font-size: 10px;
+      font-weight: 600;
+
+      cursor: pointer;
+    `;
+
+    button.addEventListener(
+      "click",
+      () => {
+        document
+          .querySelectorAll(
+            "#cogniv-playlist-filters button"
+          )
+          .forEach((other) => {
+            other.style.background =
+              "#1f2937";
+          });
+
+        button.style.background =
+          "#2563eb";
+
+        applyCognivPlaylistFilter(
+          value,
+          data
+        );
+      }
+    );
+
+    filterBar.appendChild(button);
+  });
+
+  body.appendChild(filterBar);
+
+
+  // ----------------------------------------------------------
   // Course title
   // ----------------------------------------------------------
 
@@ -973,7 +1383,7 @@ function renderCognivProgress(body, data) {
   courseTitle.style.cssText = `
     font-size: 14px;
     font-weight: 700;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
     line-height: 1.35;
   `;
 
@@ -981,7 +1391,7 @@ function renderCognivProgress(body, data) {
 
 
   // ----------------------------------------------------------
-  // Percentage
+  // Overall playlist percentage
   // ----------------------------------------------------------
 
   const percentage = document.createElement("div");
@@ -999,7 +1409,7 @@ function renderCognivProgress(body, data) {
 
 
   // ----------------------------------------------------------
-  // Progress bar
+  // Overall playlist progress bar
   // ----------------------------------------------------------
 
   const progressTrack = document.createElement("div");
@@ -1033,6 +1443,126 @@ function renderCognivProgress(body, data) {
 
 
   // ----------------------------------------------------------
+  // Current video section
+  // ----------------------------------------------------------
+
+  const currentSection = document.createElement("div");
+
+  currentSection.id =
+    "cogniv-current-video-section";
+
+  currentSection.style.cssText = `
+    margin-top: 12px;
+    padding: 10px;
+
+    background: #172033;
+
+    border-radius: 8px;
+
+    box-sizing: border-box;
+  `;
+
+  const currentLabel = document.createElement("div");
+
+  currentLabel.textContent =
+    "CURRENT VIDEO";
+
+  currentLabel.style.cssText = `
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #9ca3af;
+    margin-bottom: 5px;
+  `;
+
+  currentSection.appendChild(currentLabel);
+
+
+  const currentTitle = document.createElement("div");
+
+  currentTitle.id =
+    "cogniv-current-video-title";
+
+  currentTitle.style.cssText = `
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: #f3f4f6;
+    margin-bottom: 7px;
+  `;
+
+  currentSection.appendChild(currentTitle);
+
+
+  const currentTimes = document.createElement("div");
+
+  currentTimes.style.cssText = `
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    font-size: 11px;
+    color: #d1d5db;
+
+    margin-bottom: 6px;
+  `;
+
+  const currentElapsed =
+    document.createElement("span");
+
+  currentElapsed.id =
+    "cogniv-current-elapsed";
+
+  const currentRemaining =
+    document.createElement("span");
+
+  currentRemaining.id =
+    "cogniv-current-remaining";
+
+  currentTimes.appendChild(currentElapsed);
+  currentTimes.appendChild(currentRemaining);
+
+  currentSection.appendChild(currentTimes);
+
+
+  const currentTrack =
+    document.createElement("div");
+
+  currentTrack.style.cssText = `
+    width: 100%;
+    height: 5px;
+
+    background: #374151;
+
+    border-radius: 999px;
+
+    overflow: hidden;
+  `;
+
+  const currentFill =
+    document.createElement("div");
+
+  currentFill.id =
+    "cogniv-current-progress-fill";
+
+  currentFill.style.cssText = `
+    width: 0%;
+    height: 100%;
+
+    background: #60a5fa;
+
+    border-radius: 999px;
+
+    transition: width 0.2s linear;
+  `;
+
+  currentTrack.appendChild(currentFill);
+  currentSection.appendChild(currentTrack);
+
+  body.appendChild(currentSection);
+
+
+  // ----------------------------------------------------------
   // Statistics
   // ----------------------------------------------------------
 
@@ -1042,15 +1572,16 @@ function renderCognivProgress(body, data) {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
-    margin-top: 12px;
+    margin-top: 10px;
   `;
 
-  const watched = document.createElement("div");
+  const completed =
+    document.createElement("div");
 
-  watched.textContent =
+  completed.textContent =
     `${summary.completed_lessons} / ${summary.total_lessons} completed`;
 
-  watched.style.cssText = `
+  completed.style.cssText = `
     padding: 9px;
     background: #1f2937;
     border-radius: 8px;
@@ -1058,7 +1589,8 @@ function renderCognivProgress(body, data) {
     color: #d1d5db;
   `;
 
-  const remaining = document.createElement("div");
+  const remaining =
+    document.createElement("div");
 
   remaining.textContent =
     `${formatCognivDuration(summary.remaining_seconds)} left`;
@@ -1071,34 +1603,10 @@ function renderCognivProgress(body, data) {
     color: #d1d5db;
   `;
 
-  stats.appendChild(watched);
+  stats.appendChild(completed);
   stats.appendChild(remaining);
 
   body.appendChild(stats);
-
-
-  // ----------------------------------------------------------
-  // Current lesson
-  // ----------------------------------------------------------
-
-  if (data.current_lesson) {
-    const current = document.createElement("div");
-
-    current.textContent =
-      `Current: ${data.current_lesson.title}`;
-
-    current.style.cssText = `
-      margin-top: 12px;
-      padding: 9px;
-      background: #172033;
-      border-radius: 8px;
-      font-size: 12px;
-      line-height: 1.4;
-      color: #dbeafe;
-    `;
-
-    body.appendChild(current);
-  }
 
 
   // ----------------------------------------------------------
@@ -1106,26 +1614,393 @@ function renderCognivProgress(body, data) {
   // ----------------------------------------------------------
 
   if (data.continue_lesson) {
-    const continueBox = document.createElement("div");
+    const continueLesson =
+      data.continue_lesson;
+
+    const continueBox =
+      document.createElement("div");
 
     continueBox.textContent =
-      `Continue: ${data.continue_lesson.title}`;
+      `Continue: ${continueLesson.title}`;
 
     continueBox.style.cssText = `
+      display: block;
+
+      width: 100%;
+
       margin-top: 8px;
       padding: 9px;
+
+      box-sizing: border-box;
+
       background: #111827;
+
       border: 1px solid #374151;
+
       border-radius: 8px;
+
+      font-family: Arial, sans-serif;
       font-size: 12px;
       line-height: 1.4;
+
       color: #e5e7eb;
+
+      text-align: left;
+
+      cursor: pointer;
+
+      transition:
+        background 0.15s ease,
+        border-color 0.15s ease;
     `;
+
+    continueBox.title =
+      "Open this video in the YouTube playlist";
+
+    continueBox.addEventListener(
+      "mouseenter",
+      () => {
+        continueBox.style.background =
+          "#1f2937";
+
+        continueBox.style.borderColor =
+          "#4b5563";
+      }
+    );
+
+    continueBox.addEventListener(
+      "mouseleave",
+      () => {
+        continueBox.style.background =
+          "#111827";
+
+        continueBox.style.borderColor =
+          "#374151";
+      }
+    );
+
+    continueBox.addEventListener(
+      "click",
+      () => {
+        if (!continueLesson.video_url) {
+          console.warn(
+            "[Cogniv] Continue video URL missing."
+          );
+          return;
+        }
+
+        try {
+          const videoUrl =
+            new URL(
+              continueLesson.video_url
+            );
+
+          const videoId =
+            videoUrl.searchParams.get("v");
+
+          const playlistId =
+            data.course?.youtube_playlist_id;
+
+          if (!videoId) {
+            console.warn(
+              "[Cogniv] Continue video ID missing."
+            );
+            return;
+          }
+
+          if (!playlistId) {
+            console.warn(
+              "[Cogniv] Continue playlist ID missing."
+            );
+            return;
+          }
+
+          const continueUrl =
+            `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}&list=${encodeURIComponent(playlistId)}`;
+
+          window.location.href =
+            continueUrl;
+
+        } catch (error) {
+          console.warn(
+            "[Cogniv] Could not open Continue video:",
+            error
+          );
+        }
+      }
+    );
 
     body.appendChild(continueBox);
   }
+
+
+  // ----------------------------------------------------------
+  // Start live current-video progress
+  // ----------------------------------------------------------
+
+  startCognivCurrentVideoProgress(data);
 }
 
+
+// ============================================================
+// Filter YouTube playlist items
+// ============================================================
+
+function applyCognivPlaylistFilter(
+  filter,
+  data
+) {
+  const playlistRenderer =
+    document.querySelector(
+      "ytd-playlist-panel-renderer#playlist"
+    );
+
+  if (!playlistRenderer) {
+    return;
+  }
+
+  const items =
+    playlistRenderer.querySelector("#items");
+
+  if (!items) {
+    return;
+  }
+
+  const lessons =
+    data?.lessons || [];
+
+  const lessonMap = new Map();
+
+  lessons.forEach((lesson) => {
+    const videoId =
+      getCognivVideoId(
+        lesson.video_url
+      );
+
+    if (videoId) {
+      lessonMap.set(
+        videoId,
+        lesson
+      );
+    }
+  });
+
+  const youtubeItems = [
+    ...items.querySelectorAll(
+      "ytd-playlist-panel-video-renderer"
+    )
+  ];
+
+  youtubeItems.forEach((videoItem) => {
+    const thumbnail =
+      videoItem.querySelector(
+        "a#thumbnail"
+      );
+
+    if (!thumbnail) {
+      return;
+    }
+
+    const videoId =
+      getCognivVideoId(
+        thumbnail.href
+      );
+
+    const lesson =
+      lessonMap.get(videoId);
+
+    // Don't hide videos Cogniv doesn't know.
+    if (!lesson) {
+      videoItem.style.display = "";
+      return;
+    }
+
+    let show = true;
+
+    if (filter === "completed") {
+      show = Boolean(lesson.completed);
+
+    } else if (filter === "in-progress") {
+      show =
+        !lesson.completed &&
+        Number(lesson.watched_seconds) > 0;
+
+    } else if (filter === "not-started") {
+      show =
+        !lesson.completed &&
+        Number(lesson.watched_seconds) <= 0;
+    }
+
+    videoItem.style.display =
+      show ? "" : "none";
+  });
+}
+
+
+// ============================================================
+// Live current-video progress
+// ============================================================
+
+function startCognivCurrentVideoProgress(data) {
+  if (window.cognivCurrentVideoTimer) {
+    clearInterval(
+      window.cognivCurrentVideoTimer
+    );
+  }
+
+  function updateCurrentVideo() {
+    const video =
+      document.querySelector(
+        "video.html5-main-video"
+      );
+
+    const titleElement =
+      document.getElementById(
+        "cogniv-current-video-title"
+      );
+
+    const elapsedElement =
+      document.getElementById(
+        "cogniv-current-elapsed"
+      );
+
+    const remainingElement =
+      document.getElementById(
+        "cogniv-current-remaining"
+      );
+
+    const fill =
+      document.getElementById(
+        "cogniv-current-progress-fill"
+      );
+
+    if (
+      !video ||
+      !titleElement ||
+      !elapsedElement ||
+      !remainingElement ||
+      !fill
+    ) {
+      return;
+    }
+
+    const duration =
+      Number(video.duration);
+
+    const currentTime =
+      Math.max(
+        0,
+        Number(video.currentTime) || 0
+      );
+
+    if (
+      !Number.isFinite(duration) ||
+      duration <= 0
+    ) {
+      return;
+    }
+
+    const percentage =
+      Math.min(
+        100,
+        Math.max(
+          0,
+          (currentTime / duration) * 100
+        )
+      );
+
+    const remainingSeconds =
+      Math.max(
+        0,
+        duration - currentTime
+      );
+
+    // --------------------------------------------------------
+    // Find current Cogniv lesson
+    // --------------------------------------------------------
+
+    const videoId =
+      getCognivVideoId(
+        window.location.href
+      );
+
+    const lesson =
+      (data.lessons || []).find(
+        (item) =>
+          getCognivVideoId(
+            item.video_url
+          ) === videoId
+      );
+
+    if (lesson) {
+      titleElement.textContent =
+        lesson.title;
+    } else {
+      titleElement.textContent =
+        document.title
+          .replace(" - YouTube", "")
+          .trim() ||
+        "Current video";
+    }
+
+    // --------------------------------------------------------
+    // Update numbers
+    // --------------------------------------------------------
+
+    elapsedElement.textContent =
+      formatCognivTime(currentTime);
+
+    remainingElement.textContent =
+      `${formatCognivTime(remainingSeconds)} left`;
+
+    // --------------------------------------------------------
+    // Update bar
+    // --------------------------------------------------------
+
+    fill.style.width =
+      `${percentage}%`;
+  }
+
+  updateCurrentVideo();
+
+  window.cognivCurrentVideoTimer =
+    setInterval(
+      updateCurrentVideo,
+      500
+    );
+}
+
+
+// ============================================================
+// Format current video time
+// ============================================================
+
+function formatCognivTime(seconds) {
+  const total =
+    Math.max(
+      0,
+      Math.floor(
+        Number(seconds) || 0
+      )
+    );
+
+  const hours =
+    Math.floor(total / 3600);
+
+  const minutes =
+    Math.floor(
+      (total % 3600) / 60
+    );
+
+  const secs =
+    total % 60;
+
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  }
+
+  return `${minutes}:${String(secs).padStart(2, "0")}`;
+}
 
 // ============================================================
 // Duration formatter
@@ -1153,26 +2028,131 @@ function formatCognivDuration(seconds) {
 // Add Cogniv status indicators to YouTube playlist
 // ============================================================
 
+function injectCognivStatusStyles() {
+  if (document.getElementById("cogniv-status-styles")) {
+    return;
+  }
+
+  const style = document.createElement("style");
+
+  style.id = "cogniv-status-styles";
+
+  style.textContent = `
+    ytd-playlist-panel-video-renderer.cogniv-in-progress
+    #video-title::before {
+      content: "▶";
+
+      display: inline-flex;
+
+      align-items: center;
+      justify-content: center;
+
+      width: 18px;
+      height: 18px;
+
+      margin-right: 6px;
+
+      border-radius: 50%;
+
+      background: #2563eb;
+      color: #ffffff;
+
+      font-size: 9px;
+      font-weight: 700;
+
+      vertical-align: middle;
+    }
+
+    ytd-playlist-panel-video-renderer.cogniv-completed
+    #video-title::before {
+      content: "✓";
+
+      display: inline-flex;
+
+      align-items: center;
+      justify-content: center;
+
+      width: 18px;
+      height: 18px;
+
+      margin-right: 6px;
+
+      border-radius: 50%;
+
+      background: #16a34a;
+      color: #ffffff;
+
+      font-size: 11px;
+      font-weight: 700;
+
+      vertical-align: middle;
+    }
+
+    ytd-playlist-panel-video-renderer.cogniv-current {
+      border-left: 3px solid #60a5fa !important;
+      background: rgba(59, 130, 246, 0.08) !important;
+    }
+
+    ytd-playlist-panel-video-renderer.cogniv-current
+    #video-title {
+      font-weight: 700 !important;
+    }
+
+    .cogniv-video-progress {
+      display: block;
+      width: 100%;
+      max-width: 240px;
+      height: 3px;
+      margin-top: 4px;
+      border-radius: 999px;
+      background: #374151;
+      overflow: hidden;
+    }
+
+    .cogniv-video-progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: #60a5fa;
+    }
+
+    .cogniv-video-progress-label {
+      display: block;
+      margin-top: 2px;
+      font-family: Arial, sans-serif;
+      font-size: 10px;
+      line-height: 1.2;
+      color: #9ca3af;
+    }
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+
 function getCognivVideoId(url) {
   if (!url) {
     return null;
   }
 
   try {
-    const parsed = new URL(url, window.location.origin);
+    const parsed =
+      new URL(url, window.location.origin);
 
-    if (parsed.hostname.includes("youtube.com")) {
+    if (
+      parsed.hostname.includes("youtube.com")
+    ) {
       return parsed.searchParams.get("v");
     }
 
-    if (parsed.hostname === "youtu.be") {
+    if (
+      parsed.hostname === "youtu.be"
+    ) {
       return parsed.pathname.replace("/", "");
     }
-  } catch (error) {
-    console.warn(
-      "[Cogniv] Could not parse video URL:",
-      url
-    );
+  } catch {
+    return null;
   }
 
   return null;
@@ -1180,15 +2160,14 @@ function getCognivVideoId(url) {
 
 
 function applyCognivLessonStatuses(data) {
+  injectCognivStatusStyles();
+
   const playlistRenderer =
     document.querySelector(
       "ytd-playlist-panel-renderer#playlist"
     );
 
   if (!playlistRenderer) {
-    console.log(
-      "[Cogniv] Playlist renderer not found."
-    );
     return;
   }
 
@@ -1196,38 +2175,38 @@ function applyCognivLessonStatuses(data) {
     playlistRenderer.querySelector("#items");
 
   if (!items) {
-    console.log(
-      "[Cogniv] Playlist items container not found."
-    );
     return;
   }
 
-  const lessons = data?.lessons || [];
+  const lessons =
+    data?.lessons || [];
 
   if (!lessons.length) {
-    console.log(
-      "[Cogniv] No lessons received from backend."
-    );
     return;
   }
 
   // ----------------------------------------------------------
-  // Build video-id → lesson map
+  // Build Cogniv video ID → lesson map
   // ----------------------------------------------------------
 
   const lessonMap = new Map();
 
   lessons.forEach((lesson) => {
     const videoId =
-      getCognivVideoId(lesson.video_url);
+      getCognivVideoId(
+        lesson.video_url
+      );
 
     if (videoId) {
-      lessonMap.set(videoId, lesson);
+      lessonMap.set(
+        videoId,
+        lesson
+      );
     }
   });
 
   // ----------------------------------------------------------
-  // Find YouTube playlist videos
+  // Match visible YouTube videos
   // ----------------------------------------------------------
 
   const youtubeItems = [
@@ -1237,23 +2216,33 @@ function applyCognivLessonStatuses(data) {
   ];
 
   let matched = 0;
-  let added = 0;
+  let inProgress = 0;
+  let completed = 0;
+
+  const currentVideoId =
+    getCognivVideoId(window.location.href);
 
   youtubeItems.forEach((videoItem) => {
-    // Remove an existing Cogniv indicator.
-    videoItem
-      .querySelector(".cogniv-lesson-status")
-      ?.remove();
+    // Clear previous Cogniv classes.
+    videoItem.classList.remove(
+      "cogniv-in-progress",
+      "cogniv-completed",
+      "cogniv-current"
+    );
 
     const thumbnail =
-      videoItem.querySelector("a#thumbnail");
+      videoItem.querySelector(
+        "a#thumbnail"
+      );
 
     if (!thumbnail) {
       return;
     }
 
     const videoId =
-      getCognivVideoId(thumbnail.href);
+      getCognivVideoId(
+        thumbnail.href
+      );
 
     if (!videoId) {
       return;
@@ -1268,94 +2257,115 @@ function applyCognivLessonStatuses(data) {
 
     matched++;
 
+    // Remove any previous Cogniv progress UI.
+    videoItem
+      .querySelector(".cogniv-video-progress")
+      ?.remove();
+
+    videoItem
+      .querySelector(".cogniv-video-progress-label")
+      ?.remove();
+
     // --------------------------------------------------------
-    // Create status badge
+    // Per-video progress
     // --------------------------------------------------------
 
-    const badge =
-      document.createElement("span");
+    const watchedSeconds =
+      Number(lesson.watched_seconds) || 0;
 
-    badge.className =
-      "cogniv-lesson-status";
+    const durationSeconds =
+      Number(lesson.duration_seconds) || 0;
 
-    badge.style.cssText = `
-      position: absolute;
-      top: 6px;
-      left: 6px;
+    let videoPercentage = 0;
 
-      min-width: 20px;
-      height: 20px;
+    if (durationSeconds > 0) {
+      videoPercentage =
+        Math.min(
+          100,
+          Math.max(
+            0,
+            (watchedSeconds / durationSeconds) * 100
+          )
+        );
+    }
 
-      padding: 0 5px;
+    if (
+      watchedSeconds > 0 &&
+      !lesson.completed
+    ) {
+      const titleElement =
+        videoItem.querySelector("#video-title");
 
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      if (titleElement) {
+        const progress =
+          document.createElement("span");
 
-      box-sizing: border-box;
+        progress.className =
+          "cogniv-video-progress";
 
-      border-radius: 5px;
+        const fill =
+          document.createElement("span");
 
-      font-family: Arial, sans-serif;
-      font-size: 13px;
-      font-weight: 700;
+        fill.className =
+          "cogniv-video-progress-fill";
 
-      z-index: 50;
+        fill.style.width =
+          `${videoPercentage}%`;
 
-      pointer-events: none;
-    `;
+        progress.appendChild(fill);
+
+        const label =
+          document.createElement("span");
+
+        label.className =
+          "cogniv-video-progress-label";
+
+        label.textContent =
+          `${videoPercentage.toFixed(1)}% watched`;
+
+        titleElement.appendChild(progress);
+        titleElement.appendChild(label);
+      }
+    }
+
+    // Highlight the video currently open in YouTube.
+    if (
+      currentVideoId &&
+      videoId === currentVideoId
+    ) {
+      videoItem.classList.add(
+        "cogniv-current"
+      );
+    }
 
     if (lesson.completed) {
-      badge.textContent = "✓";
-      badge.title = "Completed";
+      videoItem.classList.add(
+        "cogniv-completed"
+      );
 
-      badge.style.background =
-        "rgba(22, 163, 74, 0.95)";
-
-      badge.style.color = "#ffffff";
+      completed++;
 
     } else if (
-      Number(lesson.watched_seconds) > 0
+      Number(
+        lesson.watched_seconds
+      ) > 0
     ) {
-      badge.textContent = "▶";
+      videoItem.classList.add(
+        "cogniv-in-progress"
+      );
 
-      badge.title =
-        `${lesson.percentage}% watched`;
-
-      badge.style.background =
-        "rgba(37, 99, 235, 0.95)";
-
-      badge.style.color = "#ffffff";
-
-    } else {
-      // Not started — don't add a badge.
-      return;
+      inProgress++;
     }
-
-    // YouTube thumbnails are positioned elements,
-    // but make sure this remains a safe positioning context.
-    if (
-      getComputedStyle(thumbnail).position ===
-      "static"
-    ) {
-      thumbnail.style.position = "relative";
-    }
-
-    thumbnail.appendChild(badge);
-
-    added++;
   });
 
-  // Keep the latest mapping available for debugging without
-  // flooding the YouTube console on every DOM mutation.
   window.cognivPlaylistStatusStats = {
     lessons: lessons.length,
     youtubeItems: youtubeItems.length,
     matched,
-    added,
+    inProgress,
+    completed,
   };
 }
-
 
 // ============================================================
 // Watch for YouTube playlist changes
