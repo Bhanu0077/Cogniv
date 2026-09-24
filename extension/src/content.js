@@ -43,138 +43,448 @@ function getPlaylistTitle() {
 }
 
 
-function getPlaylistVideos() {
+async function getPlaylistVideos() {
+  /*
+     YouTube lazily renders playlist items.
+
+     A normal querySelectorAll() only returns the items that
+     currently exist in the DOM. For large playlists this can
+     be substantially smaller than the real playlist.
+
+     This scanner deliberately scrolls the playlist container,
+     allows YouTube to load more items, and collects unique
+     videos by YouTube video ID.
+
+     IMPORTANT:
+     This is a one-shot scan.
+     It is NOT a MutationObserver.
+  */
+
   const selectors = [
     "ytd-playlist-panel-video-renderer",
     "ytd-playlist-video-renderer"
   ];
 
-  let elements = [];
+  function getElements() {
+    for (const selector of selectors) {
+      const elements =
+        Array.from(
+          document.querySelectorAll(selector)
+        );
 
-  for (const selector of selectors) {
-    elements = Array.from(
-      document.querySelectorAll(selector)
-    );
+      if (elements.length > 0) {
+        return elements;
+      }
+    }
 
-    if (elements.length > 0) {
-      break;
+    return [];
+  }
+
+
+  function extractVideoFromElement(
+    element,
+    fallbackPosition
+  ) {
+    if (!element) {
+      return null;
+    }
+
+    const titleElement =
+      element.querySelector("#video-title") ||
+      element.querySelector(
+        "a[href*='/watch?v=']"
+      );
+
+    const title =
+      titleElement?.textContent?.trim() || "";
+
+    if (!title) {
+      return null;
+    }
+
+    const links =
+      Array.from(
+        element.querySelectorAll("a[href]")
+      );
+
+    let videoUrl = "";
+
+    for (const link of links) {
+      const href =
+        link.getAttribute("href") ||
+        link.href ||
+        "";
+
+      if (
+        !href.includes("watch?v=")
+      ) {
+        continue;
+      }
+
+      try {
+        const parsed =
+          new URL(
+            href,
+            window.location.origin
+          );
+
+        const videoId =
+          parsed.searchParams.get("v");
+
+        if (videoId) {
+          videoUrl =
+            `https://www.youtube.com/watch?v=${videoId}`;
+
+          break;
+        }
+
+      } catch {
+        // Ignore malformed links.
+      }
+    }
+
+    if (!videoUrl) {
+      return null;
+    }
+
+    const durationElement =
+      element.querySelector(
+        ".ytd-thumbnail-overlay-time-status-renderer"
+      ) ||
+      element.querySelector(
+        "ytd-thumbnail-overlay-time-status-renderer"
+      );
+
+    const durationText =
+      durationElement?.textContent?.trim() || "";
+
+    return {
+      title,
+      video_url: videoUrl,
+      duration_seconds:
+        parseDuration(durationText),
+      duration_text: durationText,
+      position: fallbackPosition
+    };
+  }
+
+
+  /*
+     Find the scrollable playlist container.
+
+     On the YouTube playlist side panel, the actual scrolling
+     may occur on #items or one of its ancestors.
+  */
+
+  function findScrollContainer() {
+    const firstItem =
+      getElements()[0];
+
+    if (!firstItem) {
+      return null;
+    }
+
+    let node =
+      firstItem.parentElement;
+
+    while (
+      node &&
+      node !== document.body &&
+      node !== document.documentElement
+    ) {
+      const style =
+        window.getComputedStyle(node);
+
+      const canScroll =
+        (
+          style.overflowY === "auto" ||
+          style.overflowY === "scroll"
+        ) &&
+        node.scrollHeight >
+        node.clientHeight + 10;
+
+      if (canScroll) {
+        return node;
+      }
+
+      node =
+        node.parentElement;
+    }
+
+    /*
+       Fallback: use the playlist items container.
+    */
+
+    const items =
+      document.querySelector(
+        "ytd-playlist-panel-renderer#playlist #items"
+      );
+
+    if (
+      items &&
+      items.scrollHeight >
+      items.clientHeight + 10
+    ) {
+      return items;
+    }
+
+    return null;
+  }
+
+
+  const initialElements =
+    getElements();
+
+  if (!initialElements.length) {
+    return [];
+  }
+
+
+  const videoMap =
+    new Map();
+
+
+  function collectVisibleVideos() {
+    const elements =
+      getElements();
+
+    for (const element of elements) {
+      const temporaryPosition =
+        videoMap.size + 1;
+
+      const video =
+        extractVideoFromElement(
+          element,
+          temporaryPosition
+        );
+
+      if (!video) {
+        continue;
+      }
+
+      let videoId = "";
+
+      try {
+        videoId =
+          new URL(video.video_url)
+            .searchParams
+            .get("v") || "";
+      } catch {
+        continue;
+      }
+
+      if (!videoId) {
+        continue;
+      }
+
+      /*
+         Preserve the first occurrence of a video.
+         YouTube can recycle DOM nodes while scrolling.
+      */
+
+      if (!videoMap.has(videoId)) {
+        videoMap.set(
+          videoId,
+          video
+        );
+      }
     }
   }
 
-  return elements
-    .map((element, index) => {
-      // Find the title
-      const titleElement =
-        element.querySelector("#video-title") ||
-        element.querySelector(
-          "a[href*='/watch?v=']"
-        );
 
-      const title =
-        titleElement?.textContent?.trim() || "";
+  /*
+     First collection before scrolling.
+  */
 
-      // YouTube can expose the video URL through
-      // different anchor elements depending on the
-      // playlist type.
-      const linkElement =
-        element.querySelector("a#video-title") ||
-        element.querySelector("a[href*='/watch?v=']") ||
-        element.querySelector("a[href*='watch?v=']");
+  collectVisibleVideos();
 
-      let videoUrl = "";
 
-      if (linkElement) {
-        const href =
-          linkElement.getAttribute("href") ||
-          linkElement.href ||
-          "";
+  const scrollContainer =
+    findScrollContainer();
 
-        if (href) {
-          try {
-            const parsedUrl = new URL(
-              href,
-              window.location.origin
-            );
+  if (!scrollContainer) {
+    console.log(
+      "[Cogniv] No dedicated playlist scroll container found. " +
+      `Returning ${videoMap.size} videos.`
+    );
 
-            const videoId =
-              parsedUrl.searchParams.get("v");
+    return Array.from(
+      videoMap.values()
+    ).map((video, index) => ({
+      ...video,
+      position: index + 1
+    }));
+  }
 
-            if (videoId) {
-              videoUrl =
-                `https://www.youtube.com/watch?v=${videoId}`;
-            }
-          } catch (error) {
-            console.warn(
-              "[Cogniv] Could not parse video URL:",
-              href,
-              error
-            );
-          }
-        }
+
+  const originalScrollTop =
+    scrollContainer.scrollTop;
+
+
+  console.log(
+    "[Cogniv] Starting full playlist scan..."
+  );
+
+
+  let stableRounds = 0;
+  let previousCount =
+    videoMap.size;
+
+  const maxRounds = 120;
+
+
+  for (
+    let round = 0;
+    round < maxRounds;
+    round++
+  ) {
+
+    /*
+       Scroll by roughly one viewport.
+       This lets YouTube's lazy loader react naturally.
+    */
+
+    const step =
+      Math.max(
+        300,
+        Math.floor(
+          scrollContainer.clientHeight * 0.8
+        )
+      );
+
+    const nextTop =
+      Math.min(
+        scrollContainer.scrollTop + step,
+        scrollContainer.scrollHeight
+      );
+
+    scrollContainer.scrollTop =
+      nextTop;
+
+
+    /*
+       Give YouTube time to render newly loaded items.
+    */
+
+    await new Promise(
+      resolve =>
+        setTimeout(resolve, 250)
+    );
+
+
+    collectVisibleVideos();
+
+
+    const currentCount =
+      videoMap.size;
+
+
+    if (
+      currentCount ===
+      previousCount
+    ) {
+      stableRounds++;
+    } else {
+      stableRounds = 0;
+
+      console.log(
+        "[Cogniv] Playlist scan:",
+        currentCount,
+        "videos found"
+      );
+    }
+
+
+    previousCount =
+      currentCount;
+
+
+    /*
+       We consider the scan complete when:
+       - we are at the bottom, AND
+       - no new videos appeared for several rounds.
+    */
+
+    const atBottom =
+      scrollContainer.scrollTop +
+      scrollContainer.clientHeight >=
+      scrollContainer.scrollHeight - 20;
+
+
+    if (
+      atBottom &&
+      stableRounds >= 5
+    ) {
+      break;
+    }
+
+
+    /*
+       YouTube may increase scrollHeight after loading more
+       videos, so continue even when we temporarily reach the
+       previous bottom.
+    */
+
+    if (
+      atBottom
+    ) {
+      await new Promise(
+        resolve =>
+          setTimeout(resolve, 500)
+      );
+
+      collectVisibleVideos();
+
+      if (
+        videoMap.size ===
+        previousCount
+      ) {
+        stableRounds++;
+      } else {
+        stableRounds = 0;
+        previousCount =
+          videoMap.size;
       }
+    }
+  }
 
-      // Fallback: inspect every anchor inside the item
-      if (!videoUrl) {
-        const anchors =
-          Array.from(
-            element.querySelectorAll("a")
-          );
 
-        for (const anchor of anchors) {
-          const href =
-            anchor.getAttribute("href") ||
-            anchor.href ||
-            "";
+  /*
+     Restore the user's original position.
+  */
 
-          if (
-            href.includes("/watch?v=") ||
-            href.includes("watch?v=")
-          ) {
-            try {
-              const parsedUrl = new URL(
-                href,
-                window.location.origin
-              );
+  scrollContainer.scrollTop =
+    originalScrollTop;
 
-              const videoId =
-                parsedUrl.searchParams.get("v");
 
-              if (videoId) {
-                videoUrl =
-                  `https://www.youtube.com/watch?v=${videoId}`;
-                break;
-              }
-            } catch (error) {
-              // Ignore invalid URLs
-            }
-          }
-        }
-      }
+  /*
+     Convert Map → ordered array.
 
-      // Duration
-      const durationElement =
-        element.querySelector(
-          ".ytd-thumbnail-overlay-time-status-renderer"
-        ) ||
-        element.querySelector(
-          "ytd-thumbnail-overlay-time-status-renderer"
-        );
+     The DOM order can change while YouTube recycles nodes,
+     so we use the order in which unique videos were first
+     discovered.
+  */
 
-      const durationText =
-        durationElement?.textContent?.trim() || "";
-
-      return {
-        title,
-        video_url: videoUrl,
-        duration_seconds:
-          parseDuration(durationText),
-        duration_text: durationText,
+  const videos =
+    Array.from(
+      videoMap.values()
+    ).map(
+      (video, index) => ({
+        ...video,
         position: index + 1
-      };
-    })
-    .filter(video => video.title);
-}
+      })
+    );
 
+
+  console.log(
+    "[Cogniv] Full playlist scan complete:",
+    videos.length,
+    "videos"
+  );
+
+
+  return videos;
+}
 
 function parseDuration(text) {
   if (!text) {
@@ -203,7 +513,7 @@ function parseDuration(text) {
 }
 
 
-function getPlaylistData() {
+async function getPlaylistData() {
   const playlistId =
     getPlaylistId();
 
@@ -217,7 +527,7 @@ function getPlaylistData() {
     getPlaylistTitle();
 
   const videos =
-    getPlaylistVideos();
+    await getPlaylistVideos();
 
   if (!videos.length) {
     throw new Error(
@@ -289,8 +599,76 @@ function getCurrentVideoId() {
 */
 
 let cognivTrackedVideoId = "";
+let cognivEnsuredLessonId = null;
 let cognivTrackerGeneration = 0;
 let cognivInitTimer = null;
+
+
+async function ensureCurrentVideoLesson(video, videoId, videoUrl) {
+  if (
+    !video ||
+    !videoId ||
+    !videoUrl
+  ) {
+    return null;
+  }
+
+  const playlistId =
+    getPlaylistId();
+
+  if (!playlistId) {
+    console.log(
+      "[Cogniv Tracker] No playlist ID found; skipping lesson ensure."
+    );
+
+    return null;
+  }
+
+  const title =
+    document.title
+      .replace(" - YouTube", "")
+      .trim();
+
+  const durationSeconds =
+    Number.isFinite(Number(video.duration))
+      ? Math.floor(Number(video.duration))
+      : 0;
+
+  const response =
+    await chrome.runtime.sendMessage({
+      type: "ENSURE_LESSON",
+      data: {
+        user_id: 1,
+        playlist_id: playlistId,
+        video_id: videoId,
+        video_url: videoUrl,
+        title,
+        duration_seconds: durationSeconds,
+        position: 0
+      }
+    });
+
+  if (
+    !response ||
+    response.status !== "ok" ||
+    !response.lesson
+  ) {
+    throw new Error(
+      response?.message ||
+      "Failed to ensure Cogniv lesson."
+    );
+  }
+
+  cognivEnsuredLessonId =
+    response.lesson.id;
+
+  console.log(
+    "[Cogniv Tracker] Lesson ensured:",
+    response.lesson
+  );
+
+  return response.lesson;
+}
 
 
 function getTrackerVideoId() {
@@ -344,7 +722,7 @@ function isTrackerVideoValid(video) {
 }
 
 
-function sendProgress(
+async function sendProgress(
   completed = false,
   eventVideo = null,
   eventVideoId = ""
@@ -428,7 +806,7 @@ function sendProgress(
   const finalCompleted =
     completed ||
     watchedSeconds >=
-      Math.floor(duration * 0.9);
+    Math.floor(duration * 0.9);
 
   const progressData = {
     user_id: 1,
@@ -443,27 +821,28 @@ function sendProgress(
     progressData
   );
 
-  chrome.runtime.sendMessage(
-    {
-      type: "VIDEO_PROGRESS",
-      data: progressData
-    },
-    (response) => {
-      if (chrome.runtime.lastError) {
-        console.error(
-          "[Cogniv] Progress message error:",
-          chrome.runtime.lastError.message
-        );
+  try {
+    const response =
+      await chrome.runtime.sendMessage({
+        type: "VIDEO_PROGRESS",
+        data: progressData
+      });
 
-        return;
-      }
+    console.log(
+      "[Cogniv] Progress response:",
+      response
+    );
 
-      console.log(
-        "[Cogniv] Progress response:",
-        response
-      );
-    }
-  );
+    return response;
+
+  } catch (error) {
+    console.error(
+      "[Cogniv] Progress message error:",
+      error
+    );
+
+    return null;
+  }
 }
 
 
@@ -788,12 +1167,33 @@ function initializeVideoTracker() {
         videoUrl
       }
     );
+
+    /*
+       The video has passed all stale-video checks.
+       Ensure its Cogniv lesson exists before normal
+       progress tracking continues.
+    */
+
+    ensureCurrentVideoLesson(
+      video,
+      videoId,
+      videoUrl
+    ).catch(error => {
+      console.error(
+        "[Cogniv Tracker] Lesson ensure failed:",
+        error
+      );
+    });
   }
 
   attachVideoListeners(
     video,
     videoId
   );
+
+  if (!video.paused) {
+    startTracking();
+  }
 
   trackerInitialized = true;
 }
@@ -863,19 +1263,15 @@ chrome.runtime.onMessage.addListener(
       "GET_PLAYLIST_DATA"
     ) {
 
-      try {
-
-        const data =
-          getPlaylistData();
-
-        sendResponse(data);
-
-      } catch (error) {
-
-        sendResponse({
-          error: error.message
+      getPlaylistData()
+        .then(data => {
+          sendResponse(data);
+        })
+        .catch(error => {
+          sendResponse({
+            error: error.message
+          });
         });
-      }
 
       return true;
     }
@@ -936,7 +1332,7 @@ setTimeout(
   1500
 );
 
-setTimeout(() => {
+setTimeout(async () => {
 
   currentPlaylistId =
     getPlaylistId();
@@ -949,7 +1345,7 @@ setTimeout(() => {
   try {
 
     const data =
-      getPlaylistData();
+      await getPlaylistData();
 
     console.log(
       "[Cogniv] Initial playlist:",
@@ -1426,12 +1822,12 @@ function renderCognivProgress(body, data) {
 
   progressFill.style.cssText = `
     width: ${Math.min(
-      100,
-      Math.max(
-        0,
-        Number(summary.completion_percentage) || 0
-      )
-    )}%;
+    100,
+    Math.max(
+      0,
+      Number(summary.completion_percentage) || 0
+    )
+  )}%;
     height: 100%;
     background: #3b82f6;
     border-radius: 999px;

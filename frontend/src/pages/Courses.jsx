@@ -5,71 +5,40 @@ import axios from "axios";
 const API_URL = "http://localhost:5000";
 const USER_ID = 1;
 
-
 function Courses() {
+  const [courses, setCourses] = useState([]);
 
-  const [courses, setCourses] =
-    useState([]);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [source, setSource] = useState("");
 
-  const [title, setTitle] =
-    useState("");
-
-  const [description, setDescription] =
-    useState("");
-
-  const [source, setSource] =
-    useState("");
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [creating, setCreating] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
-
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
 
   async function loadCourses() {
-
     try {
-
       setLoading(true);
 
-      const response =
-        await axios.get(
-          `${API_URL}/api/courses`
-        );
-
-      setCourses(
-        response.data.courses
+      const response = await axios.get(
+        `${API_URL}/api/courses`
       );
 
+      setCourses(response.data.courses || []);
       setError("");
-
     } catch (err) {
-
       console.error(err);
-
-      setError(
-        "Unable to load courses."
-      );
-
+      setError("Unable to load courses.");
     } finally {
-
       setLoading(false);
-
     }
   }
-
 
   useEffect(() => {
     loadCourses();
   }, []);
 
-
   async function createCourse(event) {
-
     event.preventDefault();
 
     if (!title.trim()) {
@@ -77,7 +46,6 @@ function Courses() {
     }
 
     try {
-
       setCreating(true);
       setError("");
 
@@ -96,54 +64,51 @@ function Courses() {
       setSource("");
 
       await loadCourses();
-
     } catch (err) {
-
       console.error(err);
 
       setError(
         err.response?.data?.message ||
         "Failed to create course."
       );
-
     } finally {
-
       setCreating(false);
-
     }
   }
 
-
   if (loading) {
-
     return (
       <div className="page">
-        <h2>Loading Courses...</h2>
+        <div className="page-heading">
+          <span className="eyebrow">
+            LEARNING LIBRARY
+          </span>
+
+          <h2>Courses</h2>
+
+          <p>
+            Loading your courses...
+          </p>
+        </div>
       </div>
     );
   }
 
-
   return (
-
-    <div className="page">
+    <div className="page courses-page">
 
       <section className="page-heading">
+        <span className="eyebrow">
+          LEARNING LIBRARY
+        </span>
 
-        <div>
+        <h2>Courses</h2>
 
-          <h2>
-            Courses
-          </h2>
-
-          <p>
-            Manage your learning courses.
-          </p>
-
-        </div>
-
+        <p>
+          Manage your learning courses and continue
+          where you left off.
+        </p>
       </section>
-
 
       {error && (
         <div className="error">
@@ -151,50 +116,73 @@ function Courses() {
         </div>
       )}
 
+      <section className="dashboard-panel course-create-panel">
 
-      <section className="dashboard-panel">
+        <div className="section-header">
+          <div>
+            <h2>Add Course</h2>
 
-        <h2>
-          Add Course
-        </h2>
-
+            <p>
+              Create a course for your learning library.
+            </p>
+          </div>
+        </div>
 
         <form
           className="course-form"
           onSubmit={createCourse}
         >
 
-          <input
-            type="text"
-            placeholder="Course title"
-            value={title}
-            onChange={(e) =>
-              setTitle(e.target.value)
-            }
-          />
+          <div className="form-field">
+            <label htmlFor="course-title">
+              Course title
+            </label>
 
+            <input
+              id="course-title"
+              type="text"
+              placeholder="e.g. Machine Learning"
+              value={title}
+              onChange={(e) =>
+                setTitle(e.target.value)
+              }
+            />
+          </div>
 
-          <input
-            type="text"
-            placeholder="Description"
-            value={description}
-            onChange={(e) =>
-              setDescription(e.target.value)
-            }
-          />
+          <div className="form-field">
+            <label htmlFor="course-description">
+              Description
+            </label>
 
+            <input
+              id="course-description"
+              type="text"
+              placeholder="What are you learning?"
+              value={description}
+              onChange={(e) =>
+                setDescription(e.target.value)
+              }
+            />
+          </div>
 
-          <input
-            type="text"
-            placeholder="Source"
-            value={source}
-            onChange={(e) =>
-              setSource(e.target.value)
-            }
-          />
+          <div className="form-field">
+            <label htmlFor="course-source">
+              Source
+            </label>
 
+            <input
+              id="course-source"
+              type="text"
+              placeholder="YouTube, Coursera, College, etc."
+              value={source}
+              onChange={(e) =>
+                setSource(e.target.value)
+              }
+            />
+          </div>
 
           <button
+            className="primary-button"
             type="submit"
             disabled={creating}
           >
@@ -207,51 +195,49 @@ function Courses() {
 
       </section>
 
-
-      <section className="dashboard-panel">
+      <section className="courses-section">
 
         <div className="section-header">
+          <div>
+            <h2>Your Courses</h2>
 
-          <h2>
-            My Courses
-          </h2>
-
-          <span>
-            {courses.length} course
-            {courses.length !== 1
-              ? "s"
-              : ""}
-          </span>
-
+            <p>
+              {courses.length}{" "}
+              {courses.length === 1
+                ? "course"
+                : "courses"}
+            </p>
+          </div>
         </div>
-
 
         {courses.length === 0 ? (
 
-          <div className="empty-state">
+          <div className="dashboard-panel">
+            <div className="empty-state">
+              <h3>No courses yet</h3>
 
-            <h3>
-              No courses yet
-            </h3>
-
-            <p>
-              Create your first course above.
-            </p>
-
+              <p>
+                Create your first course above.
+              </p>
+            </div>
           </div>
 
         ) : (
 
-          <div className="course-list">
+          <div className="course-grid">
 
             {courses.map((course) => (
 
-              <div
-                className="course-item"
+              <article
+                className="course-card"
                 key={course.id}
               >
 
-                <div className="course-info">
+                <div className="course-card-content">
+
+                  <div className="course-card-source">
+                    {course.source || "Course"}
+                  </div>
 
                   <h3>
                     {course.title}
@@ -259,25 +245,27 @@ function Courses() {
 
                   <p>
                     {course.description ||
-                      "No description"}
+                      "No description available."}
                   </p>
-
-                  <small>
-                    {course.source ||
-                      "Manual"}
-                  </small>
 
                 </div>
 
+                <div className="course-card-footer">
 
-                <Link
-                  className="course-button"
-                  to={`/courses/${course.id}`}
-                >
-                  View Lessons
-                </Link>
+                  <span>
+                    Course #{course.id}
+                  </span>
 
-              </div>
+                  <Link
+                    className="course-button"
+                    to={`/courses/${course.id}`}
+                  >
+                    Open Course
+                  </Link>
+
+                </div>
+
+              </article>
 
             ))}
 
@@ -290,6 +278,5 @@ function Courses() {
     </div>
   );
 }
-
 
 export default Courses;

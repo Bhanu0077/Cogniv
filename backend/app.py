@@ -1264,6 +1264,313 @@ def import_youtube_playlist():
         }), 500
 
 # ============================================
+# EXTENSION ENSURE LESSON
+# ============================================
+
+@app.route(
+    "/api/extension/ensure-lesson",
+    methods=["POST"]
+)
+def extension_ensure_lesson():
+
+    try:
+
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                "status": "error",
+                "message": "Request body is required"
+            }), 400
+
+        user_id = data.get("user_id")
+
+        playlist_id = str(
+            data.get("playlist_id", "")
+        ).strip()
+
+        video_id = str(
+            data.get("video_id", "")
+        ).strip()
+
+        video_url = str(
+            data.get("video_url", "")
+        ).strip()
+
+        title = str(
+            data.get("title", "")
+        ).strip()
+
+        try:
+            duration_seconds = max(
+                0,
+                int(data.get("duration_seconds", 0) or 0)
+            )
+        except (TypeError, ValueError):
+            return jsonify({
+                "status": "error",
+                "message": "duration_seconds must be an integer"
+            }), 400
+
+        try:
+            position = max(
+                0,
+                int(data.get("position", 0) or 0)
+            )
+        except (TypeError, ValueError):
+            return jsonify({
+                "status": "error",
+                "message": "position must be an integer"
+            }), 400
+
+        if not user_id:
+            return jsonify({
+                "status": "error",
+                "message": "user_id is required"
+            }), 400
+
+        if not playlist_id:
+            return jsonify({
+                "status": "error",
+                "message": "playlist_id is required"
+            }), 400
+
+        if not video_id:
+            return jsonify({
+                "status": "error",
+                "message": "video_id is required"
+            }), 400
+
+        if not video_url:
+            return jsonify({
+                "status": "error",
+                "message": "video_url is required"
+            }), 400
+
+        if not title:
+            return jsonify({
+                "status": "error",
+                "message": "title is required"
+            }), 400
+
+        db = get_db()
+
+        # ------------------------------------
+        # Verify user
+        # ------------------------------------
+
+        user = db.execute(
+            """
+            SELECT id
+            FROM users
+            WHERE id = ?
+            """,
+            (user_id,)
+        ).fetchone()
+
+        if not user:
+            db.close()
+
+            return jsonify({
+                "status": "error",
+                "message": "User not found"
+            }), 404
+
+        # ------------------------------------
+        # Find the Cogniv course linked to
+        # this user's YouTube playlist.
+        # ------------------------------------
+
+        course = db.execute(
+            """
+            SELECT
+                id,
+                title,
+                youtube_playlist_id
+            FROM courses
+            WHERE user_id = ?
+              AND youtube_playlist_id = ?
+            LIMIT 1
+            """,
+            (
+                user_id,
+                playlist_id
+            )
+        ).fetchone()
+
+        if not course:
+            db.close()
+
+            return jsonify({
+                "status": "error",
+                "message": "YouTube playlist is not linked to this Cogniv course",
+                "playlist_id": playlist_id
+            }), 404
+
+        # ------------------------------------
+        # Canonical YouTube URL
+        #
+        # The extension may send a URL containing
+        # playlist/index parameters. Lesson identity
+        # should be based on the video itself.
+        # ------------------------------------
+
+        canonical_video_url = (
+            f"https://www.youtube.com/watch?v={video_id}"
+        )
+
+        # ------------------------------------
+        # Check whether this lesson already exists.
+        # ------------------------------------
+
+        lesson = db.execute(
+            """
+            SELECT
+                id,
+                course_id,
+                title,
+                video_url,
+                duration_seconds,
+                position
+            FROM lessons
+            WHERE course_id = ?
+              AND video_url = ?
+            LIMIT 1
+            """,
+            (
+                course["id"],
+                canonical_video_url
+            )
+        ).fetchone()
+
+        if lesson:
+
+            # Fill missing metadata without changing
+            # existing progress or lesson identity.
+
+            updates = []
+            values = []
+
+            if (
+                (not lesson["title"])
+                and title
+            ):
+                updates.append("title = ?")
+                values.append(title)
+
+            if (
+                (not lesson["duration_seconds"])
+                and duration_seconds > 0
+            ):
+                updates.append("duration_seconds = ?")
+                values.append(duration_seconds)
+
+            if (
+                (not lesson["position"])
+                and position > 0
+            ):
+                updates.append("position = ?")
+                values.append(position)
+
+            if updates:
+
+                values.append(lesson["id"])
+
+                db.execute(
+                    f"""
+                    UPDATE lessons
+                    SET {", ".join(updates)}
+                    WHERE id = ?
+                    """,
+                    values
+                )
+
+                db.commit()
+
+                lesson = db.execute(
+                    """
+                    SELECT
+                        id,
+                        course_id,
+                        title,
+                        video_url,
+                        duration_seconds,
+                        position
+                    FROM lessons
+                    WHERE id = ?
+                    """,
+                    (lesson["id"],)
+                ).fetchone()
+
+            db.close()
+
+            return jsonify({
+                "status": "ok",
+                "created": False,
+                "lesson": dict(lesson)
+            }), 200
+
+        # ------------------------------------
+        # Create the lesson.
+        # ------------------------------------
+
+        cursor = db.execute(
+            """
+            INSERT INTO lessons
+            (
+                course_id,
+                title,
+                video_url,
+                duration_seconds,
+                position
+            )
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                course["id"],
+                title,
+                canonical_video_url,
+                duration_seconds,
+                position
+            )
+        )
+
+        db.commit()
+
+        lesson_id = cursor.lastrowid
+
+        lesson = db.execute(
+            """
+            SELECT
+                id,
+                course_id,
+                title,
+                video_url,
+                duration_seconds,
+                position
+            FROM lessons
+            WHERE id = ?
+            """,
+            (lesson_id,)
+        ).fetchone()
+
+        db.close()
+
+        return jsonify({
+            "status": "ok",
+            "created": True,
+            "lesson": dict(lesson)
+        }), 201
+
+    except Exception as error:
+
+        return jsonify({
+            "status": "error",
+            "error": str(error)
+        }), 500
+
+
+# ============================================
 # EXTENSION YOUTUBE PROGRESS
 # ============================================
 

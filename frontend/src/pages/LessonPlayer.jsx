@@ -59,10 +59,17 @@ function LessonPlayer() {
   const progressTimerRef = useRef(null);
 
   const [lesson, setLesson] = useState(null);
+  const [courseLessons, setCourseLessons] = useState([]);
   const [progress, setProgress] = useState(null);
 
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [navigatingNext, setNavigatingNext] = useState(false);
+
+  const [showCourseCelebration, setShowCourseCelebration] =
+    useState(false);
+
+  const courseCelebrationShownRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -91,8 +98,21 @@ function LessonPlayer() {
       `${API_URL}/api/courses/${courseId}/lessons`
     );
 
+    const loadedLessons =
+      lessonsResponse.data.lessons || [];
+
+    const orderedLessons = [...loadedLessons].sort(
+      (a, b) =>
+        Number(a.position || 0) -
+          Number(b.position || 0) ||
+        Number(a.id || 0) -
+          Number(b.id || 0)
+    );
+
+    setCourseLessons(orderedLessons);
+
     const foundLesson =
-      lessonsResponse.data.lessons?.find(
+      orderedLessons.find(
         (item) => item.id === Number(lessonId)
       );
 
@@ -166,6 +186,14 @@ function LessonPlayer() {
         const latestProgress = response.data.progress;
 
         setProgress(latestProgress);
+
+        if (
+          latestProgress?.completed &&
+          !nextLesson &&
+          !courseCelebrationShownRef.current
+        ) {
+          celebrateCourseCompletion();
+        }
 
         /*
         * If the embedded player is not currently playing,
@@ -325,8 +353,13 @@ function LessonPlayer() {
       window.YT.PlayerState.ENDED
     ) {
       setIsPlaying(false);
-      saveProgress(true);
       stopProgressTracking();
+
+      saveProgress(true).then((saved) => {
+        if (saved && !nextLesson) {
+          celebrateCourseCompletion();
+        }
+      });
     }
   }
 
@@ -396,11 +429,15 @@ function LessonPlayer() {
         completed
       );
 
+      return true;
+
     } catch (err) {
       console.error(
         "[Cogniv] Unable to save progress:",
         err
       );
+
+      return false;
     }
   }
 
@@ -412,6 +449,57 @@ function LessonPlayer() {
       stopProgressTracking();
     };
   }, []);
+
+  const currentLessonIndex =
+    courseLessons.findIndex(
+      (item) => item.id === Number(lessonId)
+    );
+
+  const nextLesson =
+    currentLessonIndex >= 0
+      ? courseLessons[currentLessonIndex + 1]
+      : null;
+
+  function celebrateCourseCompletion() {
+    if (courseCelebrationShownRef.current) {
+      return;
+    }
+
+    courseCelebrationShownRef.current = true;
+    setShowCourseCelebration(true);
+
+    // Automatically close the celebration after 7 seconds.
+    window.setTimeout(() => {
+      setShowCourseCelebration(false);
+    }, 7000);
+  }
+
+  async function handleNextLesson() {
+    if (!nextLesson || navigatingNext) {
+      return;
+    }
+
+    try {
+      setNavigatingNext(true);
+
+      /*
+       * Save the current position before leaving.
+       * This does not change completion semantics.
+       */
+      await saveProgress(false);
+
+      window.location.href =
+        `/courses/${courseId}/lessons/${nextLesson.id}`;
+
+    } catch (err) {
+      console.error(
+        "[Cogniv] Unable to move to next lesson:",
+        err
+      );
+
+      setNavigatingNext(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -444,8 +532,48 @@ function LessonPlayer() {
     lesson.video_url
   );
 
+  const watchedSeconds =
+    Number(progress?.watched_seconds) || 0;
+
+  const durationSeconds =
+    Number(progress?.duration_seconds) ||
+    Number(lesson.duration_seconds) ||
+    0;
+
+  const progressPercentage =
+    durationSeconds > 0
+      ? Math.min(
+          100,
+          Math.round(
+            (watchedSeconds / durationSeconds) * 100
+          )
+        )
+      : 0;
+
+  const status =
+    progress?.completed
+      ? "Completed"
+      : watchedSeconds > 0
+      ? "In Progress"
+      : "Not Started";
+
+  const formatTime = (seconds) => {
+    const value = Number(seconds) || 0;
+    const hours = Math.floor(value / 3600);
+    const minutes = Math.floor((value % 3600) / 60);
+    const remainingSeconds = Math.floor(value % 60);
+
+    if (hours > 0) {
+      return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+    }
+
+    return `${minutes}m ${String(
+      remainingSeconds
+    ).padStart(2, "0")}s`;
+  };
+
   return (
-    <div className="page">
+    <div className="page lesson-player-page">
 
       <Link
         className="back-link"
@@ -454,82 +582,232 @@ function LessonPlayer() {
         ← Back to Course
       </Link>
 
-      <section className="page-heading">
-        <div>
-          <h2>{lesson.title}</h2>
+      <section className="lesson-player-header">
+
+        <div className="lesson-player-title">
+
+          <span className="eyebrow">
+            Lesson {lesson.position}
+          </span>
+
+          <h2>
+            {lesson.title}
+          </h2>
 
           <p>
-            Lesson {lesson.position}
+            Continue learning from where you left off.
           </p>
+
         </div>
+
+        <div className="lesson-player-status">
+          <span
+            className={
+              progress?.completed
+                ? "status-badge completed"
+                : watchedSeconds > 0
+                ? "status-badge progress"
+                : "status-badge"
+            }
+          >
+            {status}
+          </span>
+        </div>
+
       </section>
 
-      <section className="dashboard-panel">
+      <section className="lesson-workspace">
 
-        {youtubeId ? (
-          <>
+        <div className="lesson-video-column">
+
+          <section className="lesson-video-panel">
+
+            {youtubeId ? (
+              <>
+                <div className="lesson-video-wrapper">
+                  <div
+                    id="cogniv-youtube-player"
+                    className="lesson-video"
+                  />
+                </div>
+
+                <div className="lesson-video-footer">
+
+                  <div>
+                    <span className="eyebrow">
+                      Source
+                    </span>
+
+                    <p>
+                      YouTube
+                    </p>
+                  </div>
+
+                  <a
+                    href={getYouTubePlaylistUrl(
+                      lesson.video_url,
+                      lesson.youtube_playlist_id
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="youtube-playlist-button"
+                  >
+                    ▶ Open in YouTube Playlist
+                  </a>
+
+                </div>
+              </>
+            ) : (
+              <div className="error">
+                This lesson does not have a valid YouTube URL.
+              </div>
+            )}
+
+          </section>
+
+        </div>
+
+        <section className="lesson-progress-panel">
+
+          <div className="lesson-progress-heading">
+
+            <div>
+              <span className="eyebrow">
+                Learning Progress
+              </span>
+
+              <h2>
+                Your Progress
+              </h2>
+            </div>
+
+            <strong>
+              {progressPercentage}%
+            </strong>
+
+          </div>
+
+          <div className="lesson-progress-track">
             <div
+              className="lesson-progress-fill"
               style={{
-                position: "relative",
-                width: "100%",
-                paddingTop: "56.25%",
-                overflow: "hidden",
-                borderRadius: "12px"
+                width: `${progressPercentage}%`
               }}
-            >
-              <div
-                id="cogniv-youtube-player"
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  width: "100%",
-                  height: "100%"
-                }}
-              />
+            />
+          </div>
+
+          <div className="lesson-progress-stats">
+
+            <div>
+              <span>Watched</span>
+              <strong>
+                {formatTime(watchedSeconds)}
+              </strong>
             </div>
 
-            <div style={{ marginTop: "16px" }}>
-              <a
-                href={getYouTubePlaylistUrl(
-                  lesson.video_url,
-                  lesson.youtube_playlist_id
-                )}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="back-link"
-              >
-                ▶ Open this lesson in YouTube Playlist
-              </a>
+            <div>
+              <span>Duration</span>
+              <strong>
+                {durationSeconds > 0
+                  ? formatTime(durationSeconds)
+                  : "Unknown"}
+              </strong>
             </div>
-          </>
+
+            <div>
+              <span>Status</span>
+              <strong>
+                {status}
+              </strong>
+            </div>
+
+          </div>
+
+        </section>
+
+      </section>
+
+      <div className="lesson-navigation">
+
+        {nextLesson ? (
+          <button
+            type="button"
+            className="next-lesson-button"
+            onClick={handleNextLesson}
+            disabled={navigatingNext}
+          >
+            {navigatingNext
+              ? "Saving..."
+              : `Next Lesson →`}
+          </button>
         ) : (
-          <div className="error">
-            This lesson does not have a valid YouTube URL.
+          <div className="course-complete-message">
+            🎉 You have reached the end of this course.
           </div>
         )}
 
-      </section>
+      </div>
 
-      <section className="dashboard-panel">
+      {showCourseCelebration && (
+        <div
+          className="course-celebration-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Course completed"
+        >
+          <div className="celebration-fireworks">
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
 
-        <h2>Lesson Progress</h2>
+          <div className="celebration-confetti">
+            {Array.from({ length: 36 }, (_, index) => (
+              <span
+                key={index}
+                style={{
+                  "--confetti-x": `${(index * 37) % 100}%`,
+                  "--confetti-delay": `${(index % 12) * 0.08}s`,
+                  "--confetti-rotate": `${(index * 47) % 360}deg`
+                }}
+              />
+            ))}
+          </div>
 
-        <p>
-          Watched:{" "}
-          {Number(progress?.watched_seconds) || 0}{" "}
-          seconds
-        </p>
+          <div className="course-celebration-card">
+            <div className="celebration-trophy">
+              🏆
+            </div>
 
-        <p>
-          Status:{" "}
-          {progress?.completed
-            ? "Completed"
-            : Number(progress?.watched_seconds) > 0
-            ? "In Progress"
-            : "Not started"}
-        </p>
+            <span className="eyebrow">
+              Course Complete
+            </span>
 
-      </section>
+            <h2>
+              You did it!
+            </h2>
+
+            <p>
+              You completed every lesson in this course.
+            </p>
+
+            <div className="celebration-stars">
+              ✦ ✦ ✦
+            </div>
+
+            <button
+              type="button"
+              className="celebration-close-button"
+              onClick={() =>
+                setShowCourseCelebration(false)
+              }
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );

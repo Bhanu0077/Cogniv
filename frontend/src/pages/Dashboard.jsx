@@ -4,15 +4,11 @@ import axios from "axios";
 const API_URL = "http://localhost:5000";
 
 function formatStudyTime(seconds) {
+  const totalSeconds = Number(seconds) || 0;
 
-  const hours = Math.floor(seconds / 3600);
-
-  const minutes = Math.floor(
-    (seconds % 3600) / 60
-  );
-
-  const remainingSeconds =
-    seconds % 60;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
 
   if (hours > 0) {
     return `${hours}h ${minutes}m`;
@@ -25,143 +21,128 @@ function formatStudyTime(seconds) {
   return `${remainingSeconds}s`;
 }
 
-
 function Dashboard() {
-
-  const [dashboard, setDashboard] =
-    useState(null);
-
-  const [loading, setLoading] =
-    useState(true);
-
-  const [error, setError] =
-    useState("");
-
+  const [dashboard, setDashboard] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   async function loadDashboard() {
-
     try {
+      setLoading(true);
 
-      const response =
-        await axios.get(
-          `${API_URL}/api/dashboard`
-        );
-
-      setDashboard(
-        response.data.data
+      const response = await axios.get(
+        `${API_URL}/api/dashboard`
       );
 
+      setDashboard(response.data.data);
       setError("");
-
     } catch (err) {
-
       console.error(err);
 
       setError(
         "Unable to connect to Cogniv backend."
       );
-
     } finally {
-
       setLoading(false);
-
     }
   }
-
 
   useEffect(() => {
     loadDashboard();
   }, []);
 
-
   if (loading) {
-
     return (
       <div className="page">
-        <h2>Loading Dashboard...</h2>
+        <div className="page-heading">
+          <h2>Dashboard</h2>
+          <p>Loading your learning overview...</p>
+        </div>
       </div>
     );
   }
 
-
   if (error) {
-
     return (
       <div className="page">
-
-        <h2>Dashboard</h2>
+        <div className="page-heading">
+          <h2>Dashboard</h2>
+          <p>Your learning overview.</p>
+        </div>
 
         <div className="error">
           {error}
         </div>
-
       </div>
     );
   }
 
+  const totalLessons =
+    Number(dashboard?.lessons) || 0;
+
+  const completedLessons =
+    Number(dashboard?.completed_lessons) || 0;
+
+  const completionPercentage =
+    totalLessons > 0
+      ? Math.min(
+          100,
+          (completedLessons / totalLessons) * 100
+        )
+      : 0;
 
   return (
-
     <div className="page">
 
-      <section className="page-heading">
-
+      <section className="page-heading dashboard-heading">
         <div>
+          <span className="eyebrow">
+            LEARNING OVERVIEW
+          </span>
 
-          <h2>
-            Dashboard
-          </h2>
+          <h2>Dashboard</h2>
 
           <p>
-            Your learning overview.
+            Keep track of your courses, lessons,
+            and study time.
           </p>
-
         </div>
-
       </section>
 
+      <section className="cards dashboard-stats">
 
-      <section className="cards">
-
-        <div className="card">
-
-          <h3>
+        <div className="card dashboard-stat-card">
+          <div className="stat-label">
             Courses
-          </h3>
+          </div>
 
           <strong>
             {dashboard.courses}
           </strong>
 
           <p>
-            Courses you're learning
+            Courses in your library
           </p>
-
         </div>
 
-
-        <div className="card">
-
-          <h3>
+        <div className="card dashboard-stat-card">
+          <div className="stat-label">
             Lessons
-          </h3>
+          </div>
 
           <strong>
             {dashboard.lessons}
           </strong>
 
           <p>
-            Total lessons
+            Total lessons available
           </p>
-
         </div>
 
-
-        <div className="card">
-
-          <h3>
+        <div className="card dashboard-stat-card">
+          <div className="stat-label">
             Completed
-          </h3>
+          </div>
 
           <strong>
             {dashboard.completed_lessons}
@@ -170,15 +151,12 @@ function Dashboard() {
           <p>
             Lessons completed
           </p>
-
         </div>
 
-
-        <div className="card">
-
-          <h3>
+        <div className="card dashboard-stat-card">
+          <div className="stat-label">
             Study Time
-          </h3>
+          </div>
 
           <strong>
             {formatStudyTime(
@@ -187,24 +165,52 @@ function Dashboard() {
           </strong>
 
           <p>
-            Total study time
+            Recorded study sessions
           </p>
-
         </div>
 
       </section>
 
+      <section className="dashboard-panel dashboard-progress-panel">
 
-      <section className="dashboard-panel">
+        <div className="section-header">
+          <div>
+            <h2>Learning Progress</h2>
 
-        <h2>
-          Getting Started
-        </h2>
+            <p>
+              {completedLessons} of {totalLessons} lessons completed
+            </p>
+          </div>
 
-        <p>
-          Add a course and start learning.
-          Your progress will appear here.
-        </p>
+          <strong className="progress-percentage">
+            {completionPercentage.toFixed(1)}%
+          </strong>
+        </div>
+
+        <div className="progress-track">
+          <div
+            className="progress-fill"
+            style={{
+              width: `${completionPercentage}%`
+            }}
+          />
+        </div>
+
+      </section>
+
+      <section className="dashboard-panel dashboard-empty-panel">
+
+        <div className="empty-state">
+          <h3>
+            Your learning workspace
+          </h3>
+
+          <p>
+            Continue adding courses and completing
+            lessons. More learning insights will appear
+            here as your activity grows.
+          </p>
+        </div>
 
       </section>
 

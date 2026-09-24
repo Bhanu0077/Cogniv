@@ -11,6 +11,7 @@ function CourseDetails() {
 
   const [course, setCourse] = useState(null);
   const [lessons, setLessons] = useState([]);
+  const [progressMap, setProgressMap] = useState({});
 
   const [title, setTitle] = useState("");
   const [videoUrl, setVideoUrl] = useState("");
@@ -54,9 +55,25 @@ function CourseDetails() {
           `${API_URL}/api/courses/${courseId}/lessons`
         );
 
-      setLessons(
-        lessonsResponse.data.lessons || []
+      const loadedLessons =
+        lessonsResponse.data.lessons || [];
+
+      setLessons(loadedLessons);
+
+      const progressResponse =
+        await axios.get(
+          `${API_URL}/api/users/1/progress`
+        );
+
+      const progressLookup = {};
+
+      (progressResponse.data.progress || []).forEach(
+        (item) => {
+          progressLookup[item.lesson_id] = item;
+        }
       );
+
+      setProgressMap(progressLookup);
 
     } catch (err) {
 
@@ -179,9 +196,13 @@ function CourseDetails() {
       </Link>
 
 
-      <section className="page-heading">
+      <section className="course-details-header">
 
-        <div>
+        <div className="course-details-header-main">
+
+          <span className="eyebrow">
+            Course
+          </span>
 
           <h2>
             {course.title}
@@ -194,7 +215,112 @@ function CourseDetails() {
 
         </div>
 
+        <div className="course-details-meta">
+          <span>
+            {lessons.length} lesson
+            {lessons.length !== 1 ? "s" : ""}
+          </span>
+
+          <span>
+            Course #{course.id}
+          </span>
+        </div>
+
       </section>
+
+
+      {(() => {
+        const completedCount = lessons.filter(
+          (lesson) =>
+            Boolean(
+              progressMap[lesson.id]?.completed
+            )
+        ).length;
+
+        const inProgressCount = lessons.filter(
+          (lesson) => {
+            const progress =
+              progressMap[lesson.id];
+
+            return (
+              !progress?.completed &&
+              Number(progress?.watched_seconds || 0) > 0
+            );
+          }
+        ).length;
+
+        const notStartedCount =
+          lessons.length -
+          completedCount -
+          inProgressCount;
+
+        const overallProgress =
+          lessons.length > 0
+            ? (completedCount / lessons.length) * 100
+            : 0;
+
+        return (
+          <section className="course-progress-summary">
+
+            <div className="course-progress-header">
+              <div>
+                <span className="eyebrow">
+                  Course Progress
+                </span>
+
+                <h2>
+                  Your learning progress
+                </h2>
+              </div>
+
+              <strong>
+                {overallProgress.toFixed(0)}%
+              </strong>
+            </div>
+
+            <div className="course-overall-progress-track">
+              <div
+                className="course-overall-progress-fill"
+                style={{
+                  width: `${overallProgress}%`
+                }}
+              />
+            </div>
+
+            <div className="course-progress-stats">
+
+              <div className="course-progress-stat completed">
+                <strong>
+                  {completedCount}
+                </strong>
+                <span>
+                  Completed
+                </span>
+              </div>
+
+              <div className="course-progress-stat in-progress">
+                <strong>
+                  {inProgressCount}
+                </strong>
+                <span>
+                  In Progress
+                </span>
+              </div>
+
+              <div className="course-progress-stat not-started">
+                <strong>
+                  {notStartedCount}
+                </strong>
+                <span>
+                  Not Started
+                </span>
+              </div>
+
+            </div>
+
+          </section>
+        );
+      })()}
 
 
       {error && (
@@ -211,49 +337,85 @@ function CourseDetails() {
       )}
 
 
-      <section className="dashboard-panel">
+      <section className="course-create-panel">
 
-        <h2>
-          Add Lesson
-        </h2>
+        <div className="course-section-heading">
+
+          <div>
+            <span className="eyebrow">
+              Course Content
+            </span>
+
+            <h2>
+              Add Lesson
+            </h2>
+
+            <p>
+              Add a video to this course manually.
+            </p>
+          </div>
+
+        </div>
 
         <form
           className="course-form"
           onSubmit={addLesson}
         >
 
-          <input
-            type="text"
-            placeholder="Lesson title"
-            value={title}
-            onChange={(e) =>
-              setTitle(e.target.value)
-            }
-          />
+          <div className="form-field">
+            <label htmlFor="lesson-title">
+              Lesson title
+            </label>
+
+            <input
+              id="lesson-title"
+              type="text"
+              placeholder="e.g. Introduction to Arrays"
+              value={title}
+              onChange={(e) =>
+                setTitle(e.target.value)
+              }
+            />
+          </div>
 
 
-          <input
-            type="url"
-            placeholder="YouTube video URL"
-            value={videoUrl}
-            onChange={(e) =>
-              setVideoUrl(e.target.value)
-            }
-          />
+          <div className="form-field">
+            <label htmlFor="lesson-video">
+              YouTube video URL
+            </label>
+
+            <input
+              id="lesson-video"
+              type="url"
+              placeholder="https://youtube.com/watch?v=..."
+              value={videoUrl}
+              onChange={(e) =>
+                setVideoUrl(e.target.value)
+              }
+            />
+          </div>
 
 
-          <input
-            type="number"
-            min="0"
-            placeholder="Duration in seconds"
-            value={duration}
-            onChange={(e) =>
-              setDuration(e.target.value)
-            }
-          />
+          <div className="form-field">
+            <label htmlFor="lesson-duration">
+              Duration
+            </label>
+
+            <input
+              id="lesson-duration"
+              type="number"
+              min="0"
+              placeholder="Seconds"
+              value={duration}
+              onChange={(e) =>
+                setDuration(e.target.value)
+              }
+            />
+          </div>
 
 
           <button
+            className="primary-button"
             type="submit"
             disabled={creating}
           >
@@ -267,19 +429,27 @@ function CourseDetails() {
       </section>
 
 
-      <section className="dashboard-panel">
+      <section className="course-lessons-panel">
 
-        <div className="section-header">
+        <div className="course-section-heading">
 
-          <h2>
-            Lessons
-          </h2>
+          <div>
+            <span className="eyebrow">
+              Learning Path
+            </span>
 
-          <span>
+            <h2>
+              Lessons
+            </h2>
+
+            <p>
+              Continue where you left off.
+            </p>
+          </div>
+
+          <span className="lesson-count">
             {lessons.length} lesson
-            {lessons.length !== 1
-              ? "s"
-              : ""}
+            {lessons.length !== 1 ? "s" : ""}
           </span>
 
         </div>
@@ -301,44 +471,140 @@ function CourseDetails() {
 
         ) : (
 
-          <div className="course-list">
+          <div className="lesson-list">
 
-            {lessons.map((lesson) => (
+            {lessons.map((lesson) => {
 
-              <Link
-                className="course-item"
-                key={lesson.id}
-                to={`/courses/${courseId}/lessons/${lesson.id}`}
-              >
+              const progress =
+                progressMap[lesson.id];
 
-                <div>
+              const watchedSeconds =
+                Number(
+                  progress?.watched_seconds || 0
+                );
 
-                  <h3>
-                    {lesson.position}.{" "}
-                    {lesson.title}
-                  </h3>
+              const durationSeconds =
+                Number(
+                  progress?.duration_seconds ||
+                  lesson.duration_seconds ||
+                  0
+                );
 
-                  <p>
-                    {lesson.video_url ||
-                      "No video URL"}
-                  </p>
+              let percentage =
+                Number(
+                  progress?.percentage || 0
+                );
 
-                </div>
+              if (
+                percentage === 0 &&
+                watchedSeconds > 0 &&
+                durationSeconds > 0
+              ) {
+                percentage =
+                  (watchedSeconds /
+                    durationSeconds) *
+                  100;
+              }
 
+              percentage = Math.min(
+                100,
+                Math.max(0, percentage)
+              );
 
-                <span>
+              const completed =
+                Boolean(progress?.completed);
 
-                  {lesson.duration_seconds > 0
-                    ? `${Math.floor(
-                        lesson.duration_seconds / 60
-                      )} min`
-                    : "Duration not set"}
+              const inProgress =
+                !completed &&
+                watchedSeconds > 0;
 
-                </span>
+              let status = "Not Started";
+              let statusClass = "not-started";
 
-              </Link>
+              if (completed) {
+                status = "Completed";
+                statusClass = "completed";
+              } else if (inProgress) {
+                status = "In Progress";
+                statusClass = "in-progress";
+              }
 
-            ))}
+              return (
+                <Link
+                  className="lesson-card"
+                  key={lesson.id}
+                  to={`/courses/${courseId}/lessons/${lesson.id}`}
+                >
+
+                  <div className="lesson-number">
+                    {lesson.position}
+                  </div>
+
+                  <div className="lesson-info">
+
+                    <h3>
+                      {lesson.title}
+                    </h3>
+
+                    <p>
+                      {lesson.video_url ||
+                        "No video URL"}
+                    </p>
+
+                    <div className="lesson-status-row">
+
+                      <span
+                        className={`lesson-status ${statusClass}`}
+                      >
+                        {status}
+                      </span>
+
+                      {inProgress && (
+                        <span className="lesson-percentage">
+                          {percentage.toFixed(0)}%
+                        </span>
+                      )}
+
+                    </div>
+
+                    {inProgress && (
+                      <div className="lesson-progress-area">
+
+                        <div className="lesson-progress-track">
+
+                          <div
+                            className="lesson-progress-fill"
+                            style={{
+                              width: `${percentage}%`
+                            }}
+                          />
+
+                        </div>
+
+                      </div>
+                    )}
+
+                  </div>
+
+                  <div className="lesson-meta">
+
+                    <span>
+                      {lesson.duration_seconds > 0
+                        ? `${Math.floor(
+                            lesson.duration_seconds / 60
+                          )} min`
+                        : "Duration not set"}
+                    </span>
+
+                    <strong>
+                      →
+                    </strong>
+
+                  </div>
+
+                </Link>
+              );
+            })}
 
           </div>
 

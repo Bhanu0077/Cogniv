@@ -135,6 +135,31 @@ chrome.runtime.onMessage.addListener(
 
       return true;
     }
+    if (message.type === "ENSURE_LESSON") {
+      ensureLesson(message.data)
+        .then(result => {
+          console.log(
+            "[Cogniv Background] Ensure lesson result:",
+            result
+          );
+
+          sendResponse(result);
+        })
+        .catch(error => {
+          console.error(
+            "[Cogniv Background] Ensure lesson error:",
+            error
+          );
+
+          sendResponse({
+            status: "error",
+            message: error.message
+          });
+        });
+
+      return true;
+    }
+
     if (message.type === "VIDEO_PROGRESS") {
       sendVideoProgress(message.data)
         .then(result => {
@@ -376,6 +401,40 @@ async function importPlaylist(
   };
 
 }
+
+async function ensureLesson(lessonData) {
+  const response = await fetch(
+    `${COGNIV_API}/api/extension/ensure-lesson`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(lessonData)
+    }
+  );
+
+  let result;
+
+  try {
+    result = await response.json();
+  } catch {
+    throw new Error(
+      `Backend returned HTTP ${response.status}`
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      result.message ||
+      result.error ||
+      `Backend error: HTTP ${response.status}`
+    );
+  }
+
+  return result;
+}
+
 
 async function sendVideoProgress(progressData) {
   const response = await fetch(

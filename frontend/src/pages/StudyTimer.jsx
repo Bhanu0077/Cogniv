@@ -131,16 +131,37 @@ function StudyTimer() {
 
       <section className="timer-panel">
 
+        <div className="timer-panel-header">
+          <span className="eyebrow">
+            Focus Session
+          </span>
+
+          <span
+            className={`timer-status ${
+              running ? "running" : ""
+            }`}
+          >
+            <span className="timer-status-dot" />
+            {running ? "Focusing" : "Ready"}
+          </span>
+        </div>
+
         <div className="timer-display">
           {formatTime(seconds)}
         </div>
 
+        <p className="timer-subtitle">
+          {running
+            ? "Stay focused. Your session is being tracked."
+            : "Start a session when you're ready to study."}
+        </p>
 
         <div className="timer-controls">
 
           {!running ? (
 
             <button
+              className="timer-primary-button"
               onClick={() => {
                 setMessage("");
                 setRunning(true);
@@ -152,6 +173,7 @@ function StudyTimer() {
           ) : (
 
             <button
+              className="timer-stop-button"
               onClick={stopAndSave}
               disabled={saving}
             >
@@ -163,7 +185,6 @@ function StudyTimer() {
           )}
 
         </div>
-
 
         {message && (
           <p className="timer-message">
