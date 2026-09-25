@@ -198,6 +198,18 @@ function CourseDetails() {
 
       <section className="course-details-header">
 
+        {course.thumbnail_url ? (
+          <img
+            className="course-details-thumbnail"
+            src={course.thumbnail_url}
+            alt={`${course.title} thumbnail`}
+          />
+        ) : (
+          <div className="course-details-thumbnail-placeholder">
+            <span>Thumbnail</span>
+          </div>
+        )}
+
         <div className="course-details-header-main">
 
           <span className="eyebrow">

@@ -247,6 +247,187 @@ def create_course():
         }), 500
 
 
+
+
+@app.route("/api/courses/<int:course_id>", methods=["PUT"])
+def update_course(course_id):
+
+    try:
+
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                "status": "error",
+                "message": "Request body is required"
+            }), 400
+
+        title = data.get("title", "").strip()
+        description = data.get("description", "").strip()
+        user_id = data.get("user_id")
+
+        if not title:
+            return jsonify({
+                "status": "error",
+                "message": "Course title is required"
+            }), 400
+
+        if not user_id:
+            return jsonify({
+                "status": "error",
+                "message": "User ID is required"
+            }), 400
+
+        db = get_db()
+
+        course = db.execute(
+            """
+            SELECT id
+            FROM courses
+            WHERE id = ?
+              AND user_id = ?
+            """,
+            (
+                course_id,
+                user_id
+            )
+        ).fetchone()
+
+        if not course:
+            db.close()
+
+            return jsonify({
+                "status": "error",
+                "message": "Course not found"
+            }), 404
+
+        db.execute(
+            """
+            UPDATE courses
+            SET
+                title = ?,
+                description = ?
+            WHERE id = ?
+              AND user_id = ?
+            """,
+            (
+                title,
+                description,
+                course_id,
+                user_id
+            )
+        )
+
+        db.commit()
+        db.close()
+
+        return jsonify({
+            "status": "ok",
+            "message": "Course updated successfully",
+            "course_id": course_id
+        })
+
+    except Exception as error:
+
+        return jsonify({
+            "status": "error",
+            "error": str(error)
+        }), 500
+
+
+
+@app.route("/api/courses/<int:course_id>", methods=["DELETE"])
+def delete_course(course_id):
+
+    try:
+
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                "status": "error",
+                "message": "Request body is required"
+            }), 400
+
+        user_id = data.get("user_id")
+
+        if not user_id:
+            return jsonify({
+                "status": "error",
+                "message": "User ID is required"
+            }), 400
+
+        db = get_db()
+
+        course = db.execute(
+            """
+            SELECT id
+            FROM courses
+            WHERE id = ?
+              AND user_id = ?
+            """,
+            (
+                course_id,
+                user_id
+            )
+        ).fetchone()
+
+        if not course:
+            db.close()
+
+            return jsonify({
+                "status": "error",
+                "message": "Course not found"
+            }), 404
+
+        db.execute(
+            """
+            DELETE FROM progress
+            WHERE lesson_id IN (
+                SELECT id
+                FROM lessons
+                WHERE course_id = ?
+            )
+            """,
+            (course_id,)
+        )
+
+        db.execute(
+            """
+            DELETE FROM lessons
+            WHERE course_id = ?
+            """,
+            (course_id,)
+        )
+
+        db.execute(
+            """
+            DELETE FROM courses
+            WHERE id = ?
+              AND user_id = ?
+            """,
+            (
+                course_id,
+                user_id
+            )
+        )
+
+        db.commit()
+        db.close()
+
+        return jsonify({
+            "status": "ok",
+            "message": "Course deleted successfully",
+            "course_id": course_id
+        })
+
+    except Exception as error:
+
+        return jsonify({
+            "status": "error",
+            "error": str(error)
+        }), 500
+
 # ============================================
 # LESSONS
 # ============================================

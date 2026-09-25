@@ -14,6 +14,11 @@ function Courses() {
 
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [editingCourseId, setEditingCourseId] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [updating, setUpdating] = useState(false);
+  const [deletingCourseId, setDeletingCourseId] = useState(null);
   const [error, setError] = useState("");
 
   async function loadCourses() {
@@ -73,6 +78,77 @@ function Courses() {
       );
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function updateCourse(courseId) {
+    if (!editTitle.trim()) {
+      setError("Course title is required.");
+      return;
+    }
+
+    try {
+      setUpdating(true);
+      setError("");
+
+      await axios.put(
+        `${API_URL}/api/courses/${courseId}`,
+        {
+          user_id: USER_ID,
+          title: editTitle.trim(),
+          description: editDescription.trim()
+        }
+      );
+
+      setEditingCourseId(null);
+      setEditTitle("");
+      setEditDescription("");
+
+      await loadCourses();
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err.response?.data?.message ||
+        "Failed to update course."
+      );
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  async function deleteCourse(courseId) {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this course?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingCourseId(courseId);
+      setError("");
+
+      await axios.delete(
+        `${API_URL}/api/courses/${courseId}`,
+        {
+          data: {
+            user_id: USER_ID
+          }
+        }
+      );
+
+      await loadCourses();
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err.response?.data?.message ||
+        "Failed to delete course."
+      );
+    } finally {
+      setDeletingCourseId(null);
     }
   }
 
@@ -247,18 +323,86 @@ function Courses() {
 
                 <div className="course-card-content">
 
-                  <div className="course-card-source">
-                    {course.source || "Course"}
-                  </div>
+                  {editingCourseId === course.id ? (
 
-                  <h3>
-                    {course.title}
-                  </h3>
+                    <div className="course-edit-form">
 
-                  <p>
-                    {course.description ||
-                      "No description available."}
-                  </p>
+                      <div className="form-field">
+                        <label>
+                          Course title
+                        </label>
+
+                        <input
+                          type="text"
+                          value={editTitle}
+                          onChange={(e) =>
+                            setEditTitle(e.target.value)
+                          }
+                        />
+                      </div>
+
+                      <div className="form-field">
+                        <label>
+                          Description
+                        </label>
+
+                        <input
+                          type="text"
+                          value={editDescription}
+                          onChange={(e) =>
+                            setEditDescription(e.target.value)
+                          }
+                        />
+                      </div>
+
+                      <div className="course-edit-actions">
+
+                        <button
+                          className="primary-button"
+                          type="button"
+                          disabled={updating}
+                          onClick={() =>
+                            updateCourse(course.id)
+                          }
+                        >
+                          {updating ? "Saving..." : "Save"}
+                        </button>
+
+                        <button
+                          className="course-cancel-button"
+                          type="button"
+                          disabled={updating}
+                          onClick={() => {
+                            setEditingCourseId(null);
+                            setEditTitle("");
+                            setEditDescription("");
+                          }}
+                        >
+                          Cancel
+                        </button>
+
+                      </div>
+
+                    </div>
+
+                  ) : (
+
+                    <>
+                      <div className="course-card-source">
+                        {course.source || "Course"}
+                      </div>
+
+                      <h3>
+                        {course.title}
+                      </h3>
+
+                      <p>
+                        {course.description ||
+                          "No description available."}
+                      </p>
+                    </>
+
+                  )}
 
                 </div>
 
@@ -268,12 +412,40 @@ function Courses() {
                     Course #{course.id}
                   </span>
 
-                  <Link
-                    className="course-button"
-                    to={`/courses/${course.id}`}
-                  >
-                    Open Course
-                  </Link>
+                  <div className="course-card-actions">
+
+                    <button
+                      className="course-edit-button"
+                      type="button"
+                      onClick={() => {
+                        setEditingCourseId(course.id);
+                        setEditTitle(course.title);
+                        setEditDescription(course.description || "");
+                        setError("");
+                      }}
+                    >
+                      Edit
+                    </button>
+
+                    <Link
+                      className="course-button"
+                      to={`/courses/${course.id}`}
+                    >
+                      Open Course
+                    </Link>
+
+                    <button
+                      className="course-delete-button"
+                      type="button"
+                      disabled={deletingCourseId === course.id}
+                      onClick={() => deleteCourse(course.id)}
+                    >
+                      {deletingCourseId === course.id
+                        ? "Deleting..."
+                        : "Delete"}
+                    </button>
+
+                  </div>
 
                 </div>
 
