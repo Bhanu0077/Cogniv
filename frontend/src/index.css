@@ -2918,3 +2918,102 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+
+
+.lesson-card-wrapper {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.lesson-card-wrapper .lesson-card {
+  flex: 1;
+}
+
+.lesson-view {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.lesson-view .lesson-card {
+  flex: 1;
+}
+
+.lesson-edit-button,
+.lesson-cancel-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 13px;
+  border: 1px solid #292d38;
+  border-radius: 7px;
+  background: #202631;
+  color: #d1d5db;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lesson-edit-button:hover,
+.lesson-cancel-button:hover {
+  background: #292f3a;
+}
+
+
+.lesson-delete-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 13px;
+  border: 1px solid #292d38;
+  border-radius: 7px;
+  background: #202631;
+  color: #d1d5db;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.lesson-delete-button:hover {
+  background: #292f3a;
+}
+
+.lesson-delete-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.lesson-edit-form {
+  width: 100%;
+  padding: 18px;
+  background: #181c25;
+  border: 1px solid #292d38;
+  border-radius: 10px;
+}
+
+.lesson-edit-form .form-field {
+  gap: 6px;
+}
+
+.lesson-edit-form input {
+  width: 100%;
+  padding: 10px 11px;
+  background: #11141b;
+  border: 1px solid #292d38;
+  border-radius: 7px;
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.lesson-edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.lesson-edit-actions .primary-button {
+  padding: 9px 13px;
+}

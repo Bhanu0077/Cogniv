@@ -19,6 +19,12 @@ function CourseDetails() {
 
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [editingLessonId, setEditingLessonId] = useState(null);
+  const [editLessonTitle, setEditLessonTitle] = useState("");
+  const [editLessonVideoUrl, setEditLessonVideoUrl] = useState("");
+  const [editLessonDuration, setEditLessonDuration] = useState("");
+  const [updatingLesson, setUpdatingLesson] = useState(false);
+  const [deletingLessonId, setDeletingLessonId] = useState(null);
 
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -152,6 +158,85 @@ function CourseDetails() {
     }
   }
 
+
+  async function updateLesson(lesson) {
+    if (!editLessonTitle.trim()) {
+      setError("Lesson title is required.");
+      return;
+    }
+
+    try {
+      setUpdatingLesson(true);
+      setError("");
+      setMessage("");
+
+      await axios.put(
+        `${API_URL}/api/lessons/${lesson.id}`,
+        {
+          title: editLessonTitle.trim(),
+          video_url: editLessonVideoUrl.trim(),
+          duration_seconds:
+            Number(editLessonDuration) || 0,
+          position: lesson.position
+        }
+      );
+
+      setEditingLessonId(null);
+      setEditLessonTitle("");
+      setEditLessonVideoUrl("");
+      setEditLessonDuration("");
+
+      setMessage("Lesson updated successfully.");
+
+      await loadCourse();
+
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err.response?.data?.message ||
+        "Unable to update lesson."
+      );
+
+    } finally {
+      setUpdatingLesson(false);
+    }
+  }
+
+  async function deleteLesson(lessonId) {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this lesson?"
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setDeletingLessonId(lessonId);
+      setError("");
+      setMessage("");
+
+      await axios.delete(
+        `${API_URL}/api/lessons/${lessonId}`
+      );
+
+      setMessage("Lesson deleted successfully.");
+
+      await loadCourse();
+
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err.response?.data?.message ||
+        "Unable to delete lesson."
+      );
+
+    } finally {
+      setDeletingLessonId(null);
+    }
+  }
 
   if (loading) {
 
@@ -542,13 +627,100 @@ function CourseDetails() {
               }
 
               return (
-                <Link
-                  className="lesson-card"
+                <div
+                  className="lesson-card-wrapper"
                   key={lesson.id}
-                  to={`/courses/${courseId}/lessons/${lesson.id}`}
                 >
 
-                  <div className="lesson-number">
+                  {editingLessonId === lesson.id ? (
+
+                    <div className="lesson-edit-form">
+
+                      <div className="form-field">
+                        <label>
+                          Lesson title
+                        </label>
+
+                        <input
+                          type="text"
+                          value={editLessonTitle}
+                          onChange={(e) =>
+                            setEditLessonTitle(e.target.value)
+                          }
+                        />
+                      </div>
+
+                      <div className="form-field">
+                        <label>
+                          Video URL
+                        </label>
+
+                        <input
+                          type="text"
+                          value={editLessonVideoUrl}
+                          onChange={(e) =>
+                            setEditLessonVideoUrl(e.target.value)
+                          }
+                        />
+                      </div>
+
+                      <div className="form-field">
+                        <label>
+                          Duration (seconds)
+                        </label>
+
+                        <input
+                          type="number"
+                          value={editLessonDuration}
+                          onChange={(e) =>
+                            setEditLessonDuration(e.target.value)
+                          }
+                        />
+                      </div>
+
+                      <div className="lesson-edit-actions">
+
+                        <button
+                          className="primary-button"
+                          type="button"
+                          disabled={updatingLesson}
+                          onClick={() =>
+                            updateLesson(lesson)
+                          }
+                        >
+                          {updatingLesson
+                            ? "Saving..."
+                            : "Save"}
+                        </button>
+
+                        <button
+                          className="lesson-cancel-button"
+                          type="button"
+                          disabled={updatingLesson}
+                          onClick={() => {
+                            setEditingLessonId(null);
+                            setEditLessonTitle("");
+                            setEditLessonVideoUrl("");
+                            setEditLessonDuration("");
+                          }}
+                        >
+                          Cancel
+                        </button>
+
+                      </div>
+
+                    </div>
+
+                  ) : (
+
+                    <div className="lesson-view">
+
+                      <Link
+                        className="lesson-card"
+                        to={`/courses/${courseId}/lessons/${lesson.id}`}
+                      >
+
+                    <div className="lesson-number">
                     {lesson.position}
                   </div>
 
@@ -614,7 +786,43 @@ function CourseDetails() {
 
                   </div>
 
-                </Link>
+                      </Link>
+
+                      <button
+                        className="lesson-edit-button"
+                  type="button"
+                  onClick={() => {
+                    setEditingLessonId(lesson.id);
+                    setEditLessonTitle(lesson.title);
+                    setEditLessonVideoUrl(lesson.video_url || "");
+                    setEditLessonDuration(
+                      lesson.duration_seconds || ""
+                    );
+                    setError("");
+                    setMessage("");
+                  }}
+                >
+                  Edit
+                      </button>
+
+                      <button
+                        className="lesson-delete-button"
+                        type="button"
+                        disabled={deletingLessonId === lesson.id}
+                        onClick={() =>
+                          deleteLesson(lesson.id)
+                        }
+                      >
+                        {deletingLessonId === lesson.id
+                          ? "Deleting..."
+                          : "Delete"}
+                      </button>
+
+                    </div>
+
+                  )}
+
+                </div>
               );
             })}
 

@@ -653,6 +653,148 @@ def get_lesson_progress(lesson_id):
 
 
 @app.route(
+    "/api/lessons/<int:lesson_id>",
+    methods=["PUT"]
+)
+def update_lesson(lesson_id):
+
+    try:
+
+        data = request.get_json()
+
+        if not data:
+            return jsonify({
+                "status": "error",
+                "message": "Request body is required"
+            }), 400
+
+        title = data.get("title", "").strip()
+        video_url = data.get("video_url", "").strip()
+        duration_seconds = data.get("duration_seconds", 0)
+        position = data.get("position", 0)
+
+        if not title:
+            return jsonify({
+                "status": "error",
+                "message": "Lesson title is required"
+            }), 400
+
+        db = get_db()
+
+        lesson = db.execute(
+            """
+            SELECT id
+            FROM lessons
+            WHERE id = ?
+            """,
+            (lesson_id,)
+        ).fetchone()
+
+        if not lesson:
+            db.close()
+
+            return jsonify({
+                "status": "error",
+                "message": "Lesson not found"
+            }), 404
+
+        db.execute(
+            """
+            UPDATE lessons
+            SET
+                title = ?,
+                video_url = ?,
+                duration_seconds = ?,
+                position = ?
+            WHERE id = ?
+            """,
+            (
+                title,
+                video_url,
+                duration_seconds,
+                position,
+                lesson_id
+            )
+        )
+
+        db.commit()
+        db.close()
+
+        return jsonify({
+            "status": "ok",
+            "message": "Lesson updated successfully",
+            "lesson_id": lesson_id
+        })
+
+    except Exception as error:
+
+        return jsonify({
+            "status": "error",
+            "error": str(error)
+        }), 500
+
+
+@app.route(
+    "/api/lessons/<int:lesson_id>",
+    methods=["DELETE"]
+)
+def delete_lesson(lesson_id):
+
+    try:
+
+        db = get_db()
+
+        lesson = db.execute(
+            """
+            SELECT id
+            FROM lessons
+            WHERE id = ?
+            """,
+            (lesson_id,)
+        ).fetchone()
+
+        if not lesson:
+            db.close()
+
+            return jsonify({
+                "status": "error",
+                "message": "Lesson not found"
+            }), 404
+
+        db.execute(
+            """
+            DELETE FROM progress
+            WHERE lesson_id = ?
+            """,
+            (lesson_id,)
+        )
+
+        db.execute(
+            """
+            DELETE FROM lessons
+            WHERE id = ?
+            """,
+            (lesson_id,)
+        )
+
+        db.commit()
+        db.close()
+
+        return jsonify({
+            "status": "ok",
+            "message": "Lesson deleted successfully",
+            "lesson_id": lesson_id
+        })
+
+    except Exception as error:
+
+        return jsonify({
+            "status": "error",
+            "error": str(error)
+        }), 500
+
+
+@app.route(
     "/api/lessons/<int:lesson_id>/progress",
     methods=["POST"]
 )
