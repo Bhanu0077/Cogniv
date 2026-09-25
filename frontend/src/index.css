@@ -2788,3 +2788,26 @@ body {
     text-align: left;
   }
 }
+
+.course-thumbnail {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: block;
+  object-fit: cover;
+  border-bottom: 1px solid var(--border);
+}
+
+.course-thumbnail-placeholder {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #11151d;
+  border-bottom: 1px solid var(--border);
+  color: #536174;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

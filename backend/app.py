@@ -147,6 +147,7 @@ def get_courses():
                 description,
                 source,
                 youtube_playlist_id,
+                thumbnail_url,
                 created_at
             FROM courses
             """
@@ -887,6 +888,40 @@ def import_youtube_playlist():
                 "message": "videos must be an array"
             }), 400
 
+        # Get the thumbnail from the first valid
+        # YouTube video in the imported playlist.
+        playlist_thumbnail_url = None
+
+        for video in videos:
+            video_url = str(
+                video.get("video_url", "")
+            ).strip()
+
+            if not video_url:
+                continue
+
+            if "youtube.com/watch?v=" in video_url:
+                video_id = video_url.split(
+                    "youtube.com/watch?v=",
+                    1
+                )[1].split("&", 1)[0].strip()
+
+            elif "youtu.be/" in video_url:
+                video_id = video_url.split(
+                    "youtu.be/",
+                    1
+                )[1].split("?", 1)[0].strip()
+
+            else:
+                video_id = ""
+
+            if video_id:
+                playlist_thumbnail_url = (
+                    f"https://i.ytimg.com/vi/"
+                    f"{video_id}/hqdefault.jpg"
+                )
+                break
+
         db = get_db()
 
         # ------------------------------------
@@ -919,7 +954,8 @@ def import_youtube_playlist():
             SELECT
                 id,
                 title,
-                source
+                source,
+                thumbnail_url
             FROM courses
             WHERE user_id = ?
               AND youtube_playlist_id = ?
@@ -935,6 +971,19 @@ def import_youtube_playlist():
         if existing_course:
 
                 course_id = existing_course["id"]
+
+                if playlist_thumbnail_url:
+                    db.execute(
+                        """
+                        UPDATE courses
+                        SET thumbnail_url = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            playlist_thumbnail_url,
+                            course_id
+                        )
+                    )
 
                 updated_lessons = []
                 added_lessons = []
@@ -1143,16 +1192,18 @@ def import_youtube_playlist():
                 title,
                 description,
                 source,
-                youtube_playlist_id
+                youtube_playlist_id,
+                thumbnail_url
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 user_id,
                 playlist_title,
                 "Imported from YouTube",
                 playlist_url,
-                playlist_id
+                playlist_id,
+                playlist_thumbnail_url
             )
         )
 

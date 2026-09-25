@@ -233,6 +233,18 @@ function Courses() {
                 key={course.id}
               >
 
+                {course.thumbnail_url ? (
+                  <img
+                    className="course-thumbnail"
+                    src={course.thumbnail_url}
+                    alt={`${course.title} thumbnail`}
+                  />
+                ) : (
+                  <div className="course-thumbnail-placeholder">
+                    <span>Thumbnail</span>
+                  </div>
+                )}
+
                 <div className="course-card-content">
 
                   <div className="course-card-source">
