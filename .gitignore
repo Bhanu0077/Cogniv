@@ -67,3 +67,4 @@ backend/venv/
 # Python cache
 __pycache__/
 *.py[cod]
+database/cogniv.db
