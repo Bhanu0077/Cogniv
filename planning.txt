@@ -1,0 +1,367 @@
+# COGNIV - FUTURE DEVELOPMENT PLAN
+
+Version: 1.0
+Status: Working MVP
+Last Updated: 2026-09-26
+
+
+==================================================
+CURRENT PRODUCT STATUS
+==================================================
+
+Cogniv is a personal learning tracker built around
+YouTube courses and playlists.
+
+Current working flow:
+
+YouTube Playlist
+        ↓
+Import into Cogniv
+        ↓
+Course
+        ↓
+Lessons
+        ↓
+YouTube Player / External YouTube
+        ↓
+Chrome Extension tracks progress
+        ↓
+Backend stores progress
+        ↓
+Cogniv synchronizes progress
+        ↓
+Course overview displays progress
+
+
+CURRENTLY WORKING
+-----------------
+
+[✓] Course creation
+[✓] Course deletion
+[✓] Lesson creation
+[✓] Lesson ordering
+[✓] YouTube playlist import
+[✓] YouTube lesson player
+[✓] Resume from saved progress
+[✓] Progress saving
+[✓] Chrome extension progress tracking
+[✓] External YouTube progress synchronization
+[✓] Automatic progress refresh
+[✓] Lesson completion detection
+[✓] Course completion detection
+[✓] Non-final lesson completion
+[✓] Final lesson course-completion celebration
+[✓] Course overview completion status
+[✓] Backend duration storage
+[✓] User progress API
+[✓] Git version control
+
+
+==================================================
+PHASE 1 - REAL WORLD TESTING
+==================================================
+
+Goal:
+Use Cogniv with real playlists before adding major
+features.
+
+Test:
+
+[ ] Import C++ / DSA playlist
+[ ] Import AI/ML playlist
+[ ] Import Linux playlist
+[ ] Watch lessons normally
+[ ] Pause and resume
+[ ] Close browser and return
+[ ] Watch through external YouTube
+[ ] Verify progress synchronization
+[ ] Verify lesson completion
+[ ] Verify course completion
+[ ] Verify resume position
+[ ] Test different playlist sizes
+
+Record every real-world bug before changing code.
+
+
+==================================================
+PHASE 2 - STABILITY
+==================================================
+
+Goal:
+Make existing functionality reliable.
+
+[ ] Test unknown YouTube duration
+[ ] Test duration = 0
+[ ] Test very short videos
+[ ] Test very long videos
+[ ] Test seeking forward
+[ ] Test seeking backward
+[ ] Test pause/resume repeatedly
+[ ] Test browser refresh
+[ ] Test closing YouTube tab
+[ ] Test network interruption
+[ ] Test duplicate progress updates
+[ ] Test empty courses
+[ ] Test single-lesson courses
+[ ] Test large playlists
+[ ] Test deleted YouTube videos
+[ ] Test invalid YouTube URLs
+
+
+==================================================
+PHASE 3 - DASHBOARD
+==================================================
+
+Goal:
+Make the Dashboard useful for daily learning.
+
+Features:
+
+[ ] Continue Learning
+[ ] Recently Watched
+[ ] Active Courses
+[ ] Course completion percentage
+[ ] Lessons completed
+[ ] Total watch time
+[ ] Current learning streak
+[ ] Last watched lesson
+[ ] Resume button
+
+Dashboard should answer:
+
+"What should I continue learning right now?"
+
+
+==================================================
+PHASE 4 - PROGRESS ANALYTICS
+==================================================
+
+Goal:
+Provide useful learning statistics.
+
+[ ] Total watch time
+[ ] Lessons completed
+[ ] Courses completed
+[ ] Courses in progress
+[ ] Weekly learning activity
+[ ] Daily watch time
+[ ] Learning streak
+[ ] Course completion percentage
+[ ] Recently completed lessons
+
+Avoid unnecessary analytics.
+
+
+==================================================
+PHASE 5 - CHROME EXTENSION HARDENING
+==================================================
+
+Goal:
+Make external YouTube tracking reliable.
+
+[ ] Improve YouTube detection
+[ ] Improve playlist detection
+[ ] Handle SPA navigation
+[ ] Handle tab changes
+[ ] Handle page refresh
+[ ] Handle pause/resume
+[ ] Handle seeking
+[ ] Handle video completion
+[ ] Handle network failure
+[ ] Retry failed API requests
+[ ] Prevent duplicate progress submissions
+[ ] Improve extension error handling
+[ ] Production backend URL configuration
+
+
+==================================================
+PHASE 6 - AUTHENTICATION
+==================================================
+
+Current development system uses:
+
+user_id = 1
+
+Replace this with real authentication.
+
+[ ] Registration
+[ ] Login
+[ ] Logout
+[ ] Password security
+[ ] Session/token handling
+[ ] Real user IDs
+[ ] User-specific courses
+[ ] User-specific progress
+[ ] Protected API endpoints
+[ ] Extension authentication
+
+
+==================================================
+PHASE 7 - COURSE MANAGEMENT
+==================================================
+
+[ ] Edit course information
+[ ] Course description
+[ ] Course thumbnail
+[ ] Reorder lessons
+[ ] Delete lessons
+[ ] Add individual YouTube videos
+[ ] Re-import playlist
+[ ] Detect changed playlist contents
+[ ] Prevent duplicate lessons
+[ ] Course search
+[ ] Course filtering
+
+
+==================================================
+PHASE 8 - LEARNING EXPERIENCE
+==================================================
+
+[ ] Better lesson player
+[ ] Previous lesson button
+[ ] Next lesson button
+[ ] Keyboard shortcuts
+[ ] Better resume experience
+[ ] Lesson notes
+[ ] Course notes
+[ ] Bookmarks
+[ ] Important timestamps
+[ ] Mark lesson complete manually
+[ ] Personal learning goals
+
+
+==================================================
+PHASE 9 - UI / UX
+==================================================
+
+[ ] Loading skeletons
+[ ] Better empty states
+[ ] Better error states
+[ ] Responsive mobile UI
+[ ] Consistent buttons
+[ ] Consistent cards
+[ ] Better navigation
+[ ] Toast notifications
+[ ] Accessibility improvements
+[ ] Dark theme refinement
+
+
+==================================================
+PHASE 10 - PRODUCTION
+==================================================
+
+[ ] Production backend
+[ ] Production frontend
+[ ] HTTPS
+[ ] Production database
+[ ] Environment variables
+[ ] Secure CORS configuration
+[ ] API security
+[ ] Error logging
+[ ] Database backups
+[ ] Extension production configuration
+[ ] Deployment documentation
+
+
+==================================================
+PHASE 11 - OPTIONAL ADVANCED FEATURES
+==================================================
+
+Only build these after the core product is stable.
+
+[ ] AI-generated course summaries
+[ ] AI lesson summaries
+[ ] Automatic notes
+[ ] Quiz generation
+[ ] Flashcards
+[ ] Spaced repetition
+[ ] AI study plans
+[ ] Learning recommendations
+[ ] Weak-topic detection
+[ ] Study reminders
+[ ] Calendar integration
+
+
+==================================================
+DEVELOPMENT RULES
+==================================================
+
+1. Do not rewrite working code unnecessarily.
+
+2. Make one logical change at a time.
+
+3. Test after every significant change.
+
+4. Commit working changes to Git.
+
+5. Never commit:
+   - node_modules
+   - Python virtual environments
+   - database secrets
+   - API keys
+   - .env files
+   - build output
+   - browser extension generated files
+
+6. Never use hardcoded production secrets.
+
+7. Keep backend and frontend responsibilities separate.
+
+8. Keep extension logic separate from frontend logic.
+
+9. Do not add features just because they are possible.
+
+10. Prioritize reliability over feature count.
+
+
+==================================================
+VERSION TARGETS
+==================================================
+
+v1.0
+----
+Working learning tracker.
+Current target.
+
+v1.1
+----
+Stability + Dashboard + Progress improvements.
+
+v1.2
+----
+Authentication + better course management.
+
+v1.3
+----
+Production deployment + extension hardening.
+
+v2.0
+----
+AI-assisted learning features.
+
+
+==================================================
+CURRENT PRIORITY
+==================================================
+
+DO NOT immediately build every feature in this file.
+
+First:
+
+1. Use Cogniv with real playlists.
+2. Find actual bugs.
+3. Fix those bugs.
+4. Improve Dashboard.
+5. Improve Progress page.
+6. Harden the extension.
+7. Add authentication.
+8. Deploy.
+
+Cogniv should remain simple:
+
+IMPORT → LEARN → TRACK → RESUME → COMPLETE
+
+
+==================================================
+END
+==================================================
