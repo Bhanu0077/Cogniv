@@ -2040,10 +2040,33 @@ def extension_progress():
 
         lesson_id = lesson["id"]
 
-        if duration_seconds <= 0:
-            duration_seconds = (
+        # Store the duration reported by the extension
+        # when the Cogniv lesson does not have one yet.
+        if (
+            duration_seconds > 0
+            and int(lesson["duration_seconds"] or 0) <= 0
+        ):
+            db.execute(
+                """
+                UPDATE lessons
+                SET duration_seconds = ?
+                WHERE id = ?
+                """,
+                (
+                    duration_seconds,
+                    lesson_id
+                )
+            )
+
+            lesson_duration_seconds = duration_seconds
+
+        else:
+            lesson_duration_seconds = (
                 lesson["duration_seconds"] or 0
             )
+
+        if duration_seconds <= 0:
+            duration_seconds = lesson_duration_seconds
 
         # Automatically consider a video complete
         # when the user reaches 90% of it.
