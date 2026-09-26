@@ -6,6 +6,10 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATABASE_FILE = BASE_DIR / "database" / "cogniv.db"
 
+from init_db import initialize_database
+
+initialize_database()
+
 app = Flask(__name__)
 CORS(app)
 
