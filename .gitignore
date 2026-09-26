@@ -60,3 +60,10 @@ database/cogniv_before_*.db
 # Local SQLite database
 database/cogniv.db
 database/*.db
+
+# Python virtual environment
+backend/venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
