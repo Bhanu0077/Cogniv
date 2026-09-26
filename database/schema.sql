@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS courses (
     description TEXT,
     source TEXT,
     youtube_playlist_id TEXT,
+    thumbnail_url TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 
     FOREIGN KEY (user_id)
