@@ -57,9 +57,13 @@ function LessonPlayer() {
 
   const playerRef = useRef(null);
   const progressTimerRef = useRef(null);
+  const lastSavedTimeRef = useRef(0);
 
   const [lesson, setLesson] = useState(null);
   const [courseLessons, setCourseLessons] = useState([]);
+
+  // Always expose the latest next lesson to async YouTube callbacks.
+  const nextLessonRef = useRef(null);
   const [progress, setProgress] = useState(null);
 
   const [currentTime, setCurrentTime] = useState(0);
@@ -187,12 +191,59 @@ function LessonPlayer() {
 
         setProgress(latestProgress);
 
+        /*
+         * A completed lesson is NOT the same as a completed course.
+         * Verify every lesson before showing the course celebration.
+         */
         if (
           latestProgress?.completed &&
-          !nextLesson &&
           !courseCelebrationShownRef.current
         ) {
-          celebrateCourseCompletion();
+          try {
+            const lessonsResponse = await axios.get(
+              `${API_URL}/api/courses/${courseId}/lessons`
+            );
+
+            const lessons =
+              lessonsResponse.data.lessons || [];
+
+            const progressResults =
+              await Promise.all(
+                lessons.map(async (courseLesson) => {
+                  try {
+                    const progressResponse =
+                      await axios.get(
+                        `${API_URL}/api/lessons/${courseLesson.id}/progress?user_id=1`
+                      );
+
+                    return progressResponse.data.progress;
+                  } catch {
+                    return null;
+                  }
+                })
+              );
+
+            const courseCompleted =
+              lessons.length > 0 &&
+              progressResults.every(
+                (item) =>
+                  item &&
+                  (
+                    item.completed === true ||
+                    Number(item.completed) === 1
+                  )
+              );
+
+            if (courseCompleted) {
+              celebrateCourseCompletion();
+            }
+
+          } catch (err) {
+            console.warn(
+              "[Cogniv] Unable to verify course completion:",
+              err
+            );
+          }
         }
 
         /*
@@ -355,9 +406,55 @@ function LessonPlayer() {
       setIsPlaying(false);
       stopProgressTracking();
 
-      saveProgress(true).then((saved) => {
-        if (saved && !nextLesson) {
-          celebrateCourseCompletion();
+      saveProgress(true).then(async (saved) => {
+        if (!saved) {
+          return;
+        }
+
+        try {
+          const response = await axios.get(
+            `${API_URL}/api/courses/${courseId}/lessons`
+          );
+
+          const lessons =
+            response.data.lessons || [];
+
+          const progressResults =
+            await Promise.all(
+              lessons.map(async (courseLesson) => {
+                try {
+                  const progressResponse =
+                    await axios.get(
+                      `${API_URL}/api/lessons/${courseLesson.id}/progress?user_id=1`
+                    );
+
+                  return progressResponse.data.progress;
+                } catch {
+                  return null;
+                }
+              })
+            );
+
+          const courseCompleted =
+            lessons.length > 0 &&
+            progressResults.every(
+              (item) =>
+                item &&
+                (
+                  item.completed === true ||
+                  Number(item.completed) === 1
+                )
+            );
+
+          if (courseCompleted) {
+            celebrateCourseCompletion();
+          }
+
+        } catch (err) {
+          console.warn(
+            "[Cogniv] Unable to verify course completion:",
+            err
+          );
         }
       });
     }
@@ -381,6 +478,16 @@ function LessonPlayer() {
           );
 
         setCurrentTime(time);
+
+        // Persist progress every 5 seconds.
+        if (
+          time > 0 &&
+          time % 5 === 0 &&
+          time !== lastSavedTimeRef.current
+        ) {
+          lastSavedTimeRef.current = time;
+          saveProgress(false);
+        }
 
       }, 1000);
   }
@@ -408,7 +515,7 @@ function LessonPlayer() {
 
       setCurrentTime(watchedSeconds);
 
-      await axios.put(
+      await axios.post(
         `${API_URL}/api/lessons/${lessonId}/progress`,
         {
           user_id: 1,
@@ -459,6 +566,9 @@ function LessonPlayer() {
     currentLessonIndex >= 0
       ? courseLessons[currentLessonIndex + 1]
       : null;
+
+  // Keep async callbacks synchronized with the latest course state.
+  nextLessonRef.current = nextLesson;
 
   function celebrateCourseCompletion() {
     if (courseCelebrationShownRef.current) {
@@ -544,8 +654,8 @@ function LessonPlayer() {
     durationSeconds > 0
       ? Math.min(
           100,
-          Math.round(
-            (watchedSeconds / durationSeconds) * 100
+          Number(
+            ((watchedSeconds / durationSeconds) * 100).toFixed(1)
           )
         )
       : 0;

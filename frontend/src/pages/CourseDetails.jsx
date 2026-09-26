@@ -99,6 +99,20 @@ function CourseDetails() {
 
   useEffect(() => {
     loadCourse();
+
+    const progressRefreshInterval =
+      setInterval(() => {
+        console.log(
+          "[Cogniv CourseDetails] Refreshing progress..."
+        );
+        loadCourse();
+      }, 5000);
+
+    return () => {
+      clearInterval(
+        progressRefreshInterval
+      );
+    };
   }, [courseId]);
 
 
@@ -351,9 +365,66 @@ function CourseDetails() {
           completedCount -
           inProgressCount;
 
+        const totalWatchedSeconds = lessons.reduce(
+          (total, lesson) => {
+            const progress =
+              progressMap[lesson.id];
+
+            const watchedSeconds =
+              Number(
+                progress?.watched_seconds || 0
+              );
+
+            const durationSeconds =
+              Number(
+                progress?.duration_seconds ||
+                lesson.duration_seconds ||
+                0
+              );
+
+            if (
+              durationSeconds <= 0 ||
+              watchedSeconds <= 0
+            ) {
+              return total;
+            }
+
+            return total + Math.min(
+              watchedSeconds,
+              durationSeconds
+            );
+          },
+          0
+        );
+
+        const totalDurationSeconds = lessons.reduce(
+          (total, lesson) => {
+            const progress =
+              progressMap[lesson.id];
+
+            const durationSeconds =
+              Number(
+                progress?.duration_seconds ||
+                lesson.duration_seconds ||
+                0
+              );
+
+            return total + Math.max(
+              0,
+              durationSeconds
+            );
+          },
+          0
+        );
+
         const overallProgress =
-          lessons.length > 0
-            ? (completedCount / lessons.length) * 100
+          totalDurationSeconds > 0
+            ? Math.min(
+                100,
+                (totalWatchedSeconds /
+                  totalDurationSeconds) *
+                  100
+              )
             : 0;
 
         return (
@@ -371,7 +442,10 @@ function CourseDetails() {
               </div>
 
               <strong>
-                {overallProgress.toFixed(0)}%
+                {overallProgress < 1
+                  ? overallProgress.toFixed(1)
+                  : overallProgress.toFixed(0)}
+                %
               </strong>
             </div>
 
@@ -609,7 +683,8 @@ function CourseDetails() {
               );
 
               const completed =
-                Boolean(progress?.completed);
+                progress?.completed === true ||
+                Number(progress?.completed) === 1;
 
               const inProgress =
                 !completed &&
