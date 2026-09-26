@@ -7,6 +7,7 @@ const USER_ID = 1;
 
 function Courses() {
   const [courses, setCourses] = useState([]);
+  const [courseProgress, setCourseProgress] = useState({});
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -25,12 +26,109 @@ function Courses() {
     try {
       setLoading(true);
 
-      const response = await axios.get(
-        `${API_URL}/api/courses`
+      const [coursesResponse, progressResponse] =
+        await Promise.all([
+          axios.get(`${API_URL}/api/courses`),
+          axios.get(`${API_URL}/api/users/${USER_ID}/progress`)
+        ]);
+
+      const loadedCourses =
+        coursesResponse.data.courses || [];
+
+      const progressList =
+        progressResponse.data.progress || [];
+
+      setCourses(loadedCourses);
+
+      const progressByLesson = {};
+
+      progressList.forEach((item) => {
+        progressByLesson[Number(item.lesson_id)] = item;
+      });
+
+      const progressByCourse = {};
+
+      await Promise.all(
+        loadedCourses.map(async (course) => {
+          try {
+            const response = await axios.get(
+              `${API_URL}/api/courses/${course.id}/lessons`
+            );
+
+            const lessons =
+              response.data.lessons || [];
+
+            const totalLessons = lessons.length;
+
+            const completedLessons =
+              lessons.filter((lesson) => {
+                const progress =
+                  progressByLesson[Number(lesson.id)];
+
+                return (
+                  progress?.completed === true ||
+                  Number(progress?.completed) === 1
+                );
+              }).length;
+
+            const watchedLessons =
+              lessons.filter((lesson) => {
+                const progress =
+                  progressByLesson[Number(lesson.id)];
+
+                return (
+                  Number(progress?.watched_seconds || 0) > 0
+                );
+              }).length;
+
+            const percentage =
+              totalLessons > 0
+                ? Math.round(
+                    (completedLessons /
+                      totalLessons) *
+                      100
+                  )
+                : 0;
+
+            let status = "Not Started";
+
+            if (
+              totalLessons > 0 &&
+              completedLessons === totalLessons
+            ) {
+              status = "Completed";
+            } else if (watchedLessons > 0) {
+              status = "In Progress";
+            }
+
+            progressByCourse[course.id] = {
+              totalLessons,
+              completedLessons,
+              watchedLessons,
+              percentage,
+              status
+            };
+
+          } catch (lessonError) {
+            console.warn(
+              `[Cogniv] Unable to load lessons for course ${course.id}:`,
+              lessonError
+            );
+
+            progressByCourse[course.id] = {
+              totalLessons: 0,
+              completedLessons: 0,
+              watchedLessons: 0,
+              percentage: 0,
+              status: "Not Started"
+            };
+          }
+        })
       );
 
-      setCourses(response.data.courses || []);
+      setCourseProgress(progressByCourse);
       setError("");
+
     } catch (err) {
       console.error(err);
       setError("Unable to load courses.");
@@ -41,6 +139,14 @@ function Courses() {
 
   useEffect(() => {
     loadCourses();
+
+    const interval = setInterval(() => {
+      loadCourses();
+    }, 5000);
+
+    return () => {
+      clearInterval(interval);
+    };
   }, []);
 
   async function createCourse(event) {
@@ -400,6 +506,48 @@ function Courses() {
                         {course.description ||
                           "No description available."}
                       </p>
+
+                      {(() => {
+                        const stats =
+                          courseProgress[course.id] || {
+                            totalLessons: 0,
+                            completedLessons: 0,
+                            watchedLessons: 0,
+                            percentage: 0,
+                            status: "Not Started"
+                          };
+
+                        return (
+                          <div className="course-progress-summary">
+
+                            <div className="course-progress-header">
+                              <span>
+                                {stats.completedLessons} / {stats.totalLessons} lessons
+                              </span>
+
+                              <strong>
+                                {stats.percentage}%
+                              </strong>
+                            </div>
+
+                            <div className="course-progress-track">
+                              <div
+                                className="course-progress-fill"
+                                style={{
+                                  width: `${stats.percentage}%`
+                                }}
+                              />
+                            </div>
+
+                            <div className="course-progress-footer">
+                              <span>
+                                {stats.status}
+                              </span>
+                            </div>
+
+                          </div>
+                        );
+                      })()}
                     </>
 
                   )}
